@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "MergeAddressesAndBuildings": {
+      "commandName": "Project",
+      "commandLineArgs": "/NewBuildings=\"D:\\mike\\Projects\\OpenStreetMap\\Spartanburg\\Buildings\\newSpartanburgBuildings.osm\" /NewAddresses=\"D:\\mike\\Projects\\OpenStreetMap\\Spartanburg\\Addresses\\SpartanburgAddresses.osm\" /County=\"Spartanburg County\" /ResultFolder=\"D:\\mike\\Projects\\OpenStreetMap\\Spartanburg\\Addresses\\MergedAddresses\" /TaskGeoJSON=\"D:\\mike\\Projects\\OpenStreetMap\\Spartanburg\\Buildings\\111-tasks.geoJSON\""
+    }
+  }
+}
