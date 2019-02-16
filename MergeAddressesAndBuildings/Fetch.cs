@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace MergeAddressesAndBuildings
 {
@@ -18,26 +19,32 @@ namespace MergeAddressesAndBuildings
         //   2. All existing buildings (including demolished:building) 
         public const string BuildingAddrOverpassScript =
             @"[out:xml][timeout:180];
-            area[name=""%COUNTYNAME%""][admin_level=6][boundary=administrative]->.county;
-            // gather results
-            (
-            // query part for: (wildcard key like) == * anything
-              node(area.county)[~""addr.*""~"".*""];
-              (way(area.county)[~""addr.*""~"".*""]; - way(area.county)[""highway""~"".*""];);
-              relation(area.county)[~""addr.*""~"".*""];
 
-              node(area.county)[~"".*building.*""~"".*""];
-              way(area.county)[~"".*building.*""~"".*""];
-              relation(area.county)[~"".*building.*""~"".*""];
+            area[""ISO3166-2""=""US-%STATEABBR%""][boundary=administrative]->.state;
+            (
+              area (area.state)[name=""%COUNTYNAME%""][admin_level=6][boundary=administrative]->.county;
+
+                // gather results
+                (
+                // query part for: (wildcard key like) == * anything
+                  node(area.county)[~""addr.*""~"".*""];
+                  (way(area.county)[~""addr.*""~"".*""]; - way(area.county)[""highway""~"".*""];);
+                  relation(area.county)[~""addr.*""~"".*""];
+
+                  node(area.county)[~"".*building.*""~"".*""];
+                  way(area.county)[~"".*building.*""~"".*""];
+                  relation(area.county)[~"".*building.*""~"".*""];
+                );
 
             );
             (._;>;);
             out meta;";
 
 
-        public static void FetchOSMAddrsAndBuildingsToFile(string countyName, string outputFilename)
+        public static void FetchOSMAddrsAndBuildingsToFile(string countyName, string stateAbbreviation, string outputFilename)
         {
             var overpassScript = BuildingAddrOverpassScript.Replace("%COUNTYNAME%", countyName);
+            overpassScript = overpassScript.Replace("%STATEABBR%", stateAbbreviation);
             using (var binaryStream = new BinaryWriter(File.Open(outputFilename, FileMode.Create)))
             {
                 FetchToStream(overpassScript, binaryStream, countyName);
@@ -49,12 +56,17 @@ namespace MergeAddressesAndBuildings
         // Overpass script to fetch US County outline
         public const string CountyOutlineOverpassScript =
             @"[out:xml][timeout:25];
-            rel [name=""%COUNTYNAME%""][admin_level=6][boundary=administrative];
+            area[""ISO3166-2""=""US-%STATEABBR%""][boundary=administrative]->.state;
+            (
+              rel (area.state)[name=""%COUNTYNAME%""][admin_level=6][boundary=administrative];
+  
+            );
             (._;>;);
             out meta;";
-        public static void FetchCountyOutlineToFile(string countyName, string outputFilename)
+        public static void FetchCountyOutlineToFile(string countyName, string stateAbbreviation, string outputFilename)
         {
             var overpassScript = CountyOutlineOverpassScript.Replace("%COUNTYNAME%", countyName);
+            overpassScript = overpassScript.Replace("%STATEABBR%", stateAbbreviation);
             using (var binaryStream = new BinaryWriter(File.Open(outputFilename, FileMode.Create)))
             {
                 FetchToStream(overpassScript, binaryStream, countyName);
@@ -67,6 +79,9 @@ namespace MergeAddressesAndBuildings
         private static void FetchToStream(string overpassScript, BinaryWriter outputStream, string countyName)
         {
             HttpClient httpClient = new HttpClient();
+
+            // Remove multiple spaces for efficiency
+            overpassScript = Regex.Replace(overpassScript, @"\s+", " ");
 
             var requestURL = "https://overpass-api.de/api/interpreter";
             var postValues = new Dictionary<string, string>();

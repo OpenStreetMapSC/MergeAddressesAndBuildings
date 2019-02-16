@@ -59,16 +59,26 @@ namespace MergeAddressesAndBuildings
                 ShowHelp();
             }
             var countyName = ValidateArgument("County", true, false);
+            var stateAbbreviation = ValidateArgument("State", true, false);
+            if (stateAbbreviation.Length != 2)
+            {
+                throw new Exception($"Expected 2 letter US abbreviation for state instead of {stateAbbreviation}");
+            }
 
             var countyFile = Path.Combine(resultFolder, countyName + ".osm");
             if (!File.Exists(countyFile))
             {
                 Console.WriteLine($"Downloading boundary for {countyName}...");
-                Fetch.FetchCountyOutlineToFile("county", countyFile);
+                Fetch.FetchCountyOutlineToFile(countyName, stateAbbreviation, countyFile);
             }
 
             var osmCountyBorder = new OSMDataset();
             osmCountyBorder.ReadOSMDocument(countyFile);
+            if (osmCountyBorder.osmNodes.Count == 0)
+            {
+                throw new Exception($"Got no data from Overpass query for {countyName} in file {countyFile} \n\n");
+            }
+
             var buckets = new Buckets(osmCountyBorder.osmWays, 100 /* meters */);
 
             var currentOSMFile = Path.Combine(resultFolder, "CurrentAddrBuildings.osm");
@@ -76,11 +86,15 @@ namespace MergeAddressesAndBuildings
             if (!File.Exists(currentOSMFile) || OutOfDate(currentOSMFile))
             {
                 Console.WriteLine($"Downloading existing building and address data from {countyName}...");
-                Fetch.FetchOSMAddrsAndBuildingsToFile(countyName, currentOSMFile);
+                Fetch.FetchOSMAddrsAndBuildingsToFile(countyName, stateAbbreviation, currentOSMFile);
             }
             Console.WriteLine("Reading downloaded OSM data...");
             var osmExistingData = new OSMDataset();
             osmExistingData.ReadOSMDocument(currentOSMFile);
+            if (osmExistingData.osmNodes.Count == 0)
+            {
+                throw new Exception($"Got no data from Overpass query for {countyName} in file {currentOSMFile} \n\n");
+            }
 
             Console.WriteLine($"Existing data: {osmExistingData.osmNodes.Count:N0} nodes, {osmExistingData.osmWays.Count:N0} ways, {osmExistingData.osmRelations.Count:N0} relations");
 
@@ -88,6 +102,10 @@ namespace MergeAddressesAndBuildings
             var newBuildings = new OSMDataset();
             newBuildings.ReadOSMDocument(newBuildingsFilePath);
             Console.WriteLine($"Found {newBuildings.osmWays.Count:N0} new buildings");
+            if (newBuildings.osmNodes.Count == 0)
+            {
+                throw new Exception($"Got no data from new buildings file {currentOSMFile} \n\n");
+            }
 
             Console.Write("Reading new addresses...");
             var newAddresses = new OSMDataset();
@@ -173,9 +191,9 @@ namespace MergeAddressesAndBuildings
 
             Console.WriteLine();
             Console.WriteLine( "MergeAddressesAndBuildings Usage:");
-            Console.WriteLine(@"  MergeAddressesAndBuildings /NewBuildings=""filepath"" /NewAddresses=""filepath"" /County=""Name in OSM"" /ResultFolder=""Existing Directory"" ");
+            Console.WriteLine(@"  MergeAddressesAndBuildings /NewBuildings=""filepath"" /NewAddresses=""filepath"" /County=""Name in OSM"" /ResultFolder=""Existing Directory"" /State=""2LetterStateAbbreviation"" ");
             Console.WriteLine( "  For example: ");
-            Console.WriteLine(@"  MergeAddressesAndBuildings  /NewBuildings=""C:\users\me\OSM\NewBuildings.osm"" /NewAddresses=""C:\users\me\OSM\NewAddresses.osm"" /County=""Spartanburg County"" /ResultFolder=""C:\users\me\OSM\Merged"" ");
+            Console.WriteLine(@"  MergeAddressesAndBuildings  /NewBuildings=""C:\users\me\OSM\NewBuildings.osm"" /NewAddresses=""C:\users\me\OSM\NewAddresses.osm"" /County=""Spartanburg County"" /State=""SC"" /ResultFolder=""C:\users\me\OSM\Merged"" ");
 
         }
 

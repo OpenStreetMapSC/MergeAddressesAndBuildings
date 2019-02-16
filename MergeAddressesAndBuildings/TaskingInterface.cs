@@ -17,6 +17,8 @@ namespace MergeAddressesAndBuildings
 
         private OSMDataset[] osmDataSections;
 
+        // For each node, the list of connected ways so that ways sharing nodes are properly handled
+        private Dictionary<OSMNode, List<OSMWay>> connectedWays;
 
 
         /// <summary>
@@ -30,6 +32,8 @@ namespace MergeAddressesAndBuildings
             osmDataset.ResetUsedFlag();
 
             osmDataSections = new OSMDataset[taskBuckets.NHorizontal * taskBuckets.NVertical];
+
+            InitializeConnectedWays(osmDataset);
 
             // Place data into indiividual sections
             foreach (var relation in osmDataset.osmRelations.Values)
@@ -73,6 +77,30 @@ namespace MergeAddressesAndBuildings
             WriteTaskGeoJSON(taskBuckets, outputFilePath);
         }
 
+        private void InitializeConnectedWays(OSMDataset osmDataset)
+        {
+            // Set up empty list of connected ways to start
+            connectedWays = new Dictionary<OSMNode, List<OSMWay>>();
+            foreach ( var node in osmDataset.osmNodes.Values)
+            {
+                var wayList = new List<OSMWay>();
+                connectedWays.Add(node, wayList);
+            }
+
+            foreach (var way in osmDataset.osmWays.Values)
+            {
+                foreach (var node in way.NodeList)
+                {
+                    var ways = connectedWays[node];
+                    if (!ways.Contains(way))
+                    {
+                        ways.Add(way);
+                    }
+                }
+            }
+        }
+
+
 
         private void WriteTaskGeoJSON(Buckets taskBuckets, string outputFilePath)
         {
@@ -101,11 +129,11 @@ namespace MergeAddressesAndBuildings
         {
             var bbox = taskBuckets.GetBBox(x, y);
             var properties = new Dictionary<string, object>();
-            properties.Add("taskX", x); // Ignored
-            properties.Add("taskY", y); // Ignored
-            properties.Add("taskZoom", Zoom); // Ignored
-            properties.Add("taskSplittable", false); // Ignored
-            properties.Add("taskStatus", "READY"); // Ignored
+            //properties.Add("taskX", x); // Ignored
+            //properties.Add("taskY", y); // Ignored
+            //properties.Add("taskZoom", Zoom); // Ignored
+            //properties.Add("taskSplittable", false); // Ignored
+            //properties.Add("taskStatus", "READY"); // Ignored
             properties.Add("import_url", $"Task-{x:000}-{y:000}-{Zoom:00}.osm");
 
             List<IPosition> segments = new List<IPosition>();
@@ -170,6 +198,14 @@ namespace MergeAddressesAndBuildings
                     {
                         osmDataSection.osmNodes.Add(node.ID, node);
                         node.IsUsed = true;
+
+                        foreach (var connectedWay in connectedWays[node])
+                        {
+                            if (!connectedWay.IsUsed)
+                            {
+                                SaveWayTo(osmDataSection, connectedWay); // Recursive to include all ways sharing this node
+                            }
+                        }
                     }
                 }
 
