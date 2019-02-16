@@ -27,8 +27,11 @@ Notes:
 
 MergeAddressesAndBuildings Usage:
   MergeAddressesAndBuildings /NewBuildings="filepath" /NewAddresses="filepath" /County="Name in OSM" /ResultFolder="Existing Directory" /State="2LetterStateAbbreviation"
+
   For example:
+
   MergeAddressesAndBuildings  /NewBuildings="C:\users\me\OSM\NewBuildings.osm" /NewAddresses="C:\users\me\OSM\NewAddresses.osm" /County="Spartanburg County" /State="SC" /ResultFolder="C:\users\me\OSM\Merged"
 (also accepts dash for parameter)
+
   MergeAddressesAndBuildings  -NewBuildings="C:\users\me\OSM\NewBuildings.osm" -NewAddresses="C:\users\me\OSM\NewAddresses.osm" -County="Spartanburg County" -State="SC" -ResultFolder="C:\users\me\OSM\Merged"
 
