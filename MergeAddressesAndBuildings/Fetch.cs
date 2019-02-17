@@ -19,11 +19,9 @@ namespace MergeAddressesAndBuildings
         //   2. All existing buildings (including demolished:building) 
         public const string BuildingAddrOverpassScript =
             @"[out:xml][timeout:180];
-
             area[""ISO3166-2""=""US-%STATEABBR%""][boundary=administrative]->.state;
             (
               area (area.state)[name=""%COUNTYNAME%""][admin_level=6][boundary=administrative]->.county;
-
                 // gather results
                 (
                 // query part for: (wildcard key like) == * anything
@@ -35,7 +33,6 @@ namespace MergeAddressesAndBuildings
                   way(area.county)[~"".*building.*""~"".*""];
                   relation(area.county)[~"".*building.*""~"".*""];
                 );
-
             );
             (._;>;);
             out meta;";
@@ -45,6 +42,7 @@ namespace MergeAddressesAndBuildings
         {
             var overpassScript = BuildingAddrOverpassScript.Replace("%COUNTYNAME%", countyName);
             overpassScript = overpassScript.Replace("%STATEABBR%", stateAbbreviation);
+            Console.WriteLine(overpassScript);
             using (var binaryStream = new BinaryWriter(File.Open(outputFilename, FileMode.Create)))
             {
                 FetchToStream(overpassScript, binaryStream, countyName);
@@ -79,9 +77,6 @@ namespace MergeAddressesAndBuildings
         private static void FetchToStream(string overpassScript, BinaryWriter outputStream, string countyName)
         {
             HttpClient httpClient = new HttpClient();
-
-            // Remove multiple spaces for efficiency
-            overpassScript = Regex.Replace(overpassScript, @"\s+", " ");
 
             var requestURL = "https://overpass-api.de/api/interpreter";
             var postValues = new Dictionary<string, string>();

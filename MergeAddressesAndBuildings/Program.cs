@@ -48,7 +48,7 @@ namespace MergeAddressesAndBuildings
             // Command line parsing
             CommandLine = new Arguments(args);
 
-            var newBuildingsFilePath = ValidateArgument("NewBuildings", true, true);
+            var newMSBuildingsFilePath = ValidateArgument("NewBuildings", true, true);
             var newAddressesFilePath = ValidateArgument("NewAddresses", true, true);
 
 
@@ -79,6 +79,22 @@ namespace MergeAddressesAndBuildings
                 throw new Exception($"Got no data from Overpass query for {countyName} in file {countyFile} \n\n");
             }
 
+
+            var newOsmBuildingsFilename = Path.Combine(resultFolder, "newBuildings.OSM");
+
+            if (!File.Exists(newOsmBuildingsFilename))
+            {
+                Console.WriteLine("Reading Microsoft Building data...");
+                var readMSBuildings = new ReadMSBuildings();
+                var newMSBuildingData = readMSBuildings.ReadGeoJSON(osmCountyBorder, newMSBuildingsFilePath);
+ 
+                // Save a copy for inspection or to save time when rerunning
+                var writeList = new List<OSMDataset>();
+                writeList.Add(newMSBuildingData);
+                WriteOSM.WriteDocument(newOsmBuildingsFilename, writeList);
+            }
+
+
             var buckets = new Buckets(osmCountyBorder.osmWays, 100 /* meters */);
 
             var currentOSMFile = Path.Combine(resultFolder, "CurrentAddrBuildings.osm");
@@ -100,7 +116,7 @@ namespace MergeAddressesAndBuildings
 
             Console.Write("Reading new buildings...");
             var newBuildings = new OSMDataset();
-            newBuildings.ReadOSMDocument(newBuildingsFilePath);
+            newBuildings.ReadOSMDocument(newOsmBuildingsFilename);
             Console.WriteLine($"Found {newBuildings.osmWays.Count:N0} new buildings");
             if (newBuildings.osmNodes.Count == 0)
             {
@@ -191,9 +207,9 @@ namespace MergeAddressesAndBuildings
 
             Console.WriteLine();
             Console.WriteLine( "MergeAddressesAndBuildings Usage:");
-            Console.WriteLine(@"  MergeAddressesAndBuildings /NewBuildings=""filepath"" /NewAddresses=""filepath"" /County=""Name in OSM"" /ResultFolder=""Existing Directory"" /State=""2LetterStateAbbreviation"" ");
+            Console.WriteLine(@"  MergeAddressesAndBuildings /NewBuildings=""filepath.geojson"" /NewAddresses=""filepath.osm"" /County=""Name in OSM"" /ResultFolder=""Existing Directory"" /State=""2LetterStateAbbreviation"" ");
             Console.WriteLine( "  For example: ");
-            Console.WriteLine(@"  MergeAddressesAndBuildings  /NewBuildings=""C:\users\me\OSM\NewBuildings.osm"" /NewAddresses=""C:\users\me\OSM\NewAddresses.osm"" /County=""Spartanburg County"" /State=""SC"" /ResultFolder=""C:\users\me\OSM\Merged"" ");
+            Console.WriteLine(@"  MergeAddressesAndBuildings  /NewBuildings=""C:\users\me\OSM\SouthCarolina.geojson"" /NewAddresses=""C:\users\me\OSM\NewAddresses.osm"" /County=""Spartanburg County"" /State=""SC"" /ResultFolder=""C:\users\me\OSM\Merged"" ");
 
         }
 
