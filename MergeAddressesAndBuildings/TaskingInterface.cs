@@ -183,6 +183,8 @@ namespace MergeAddressesAndBuildings
             var osmList = new List<OSMDataset>();
             osmList.Add(oSMDataset);
             WriteOSM.WriteDocument(filePath, osmList);
+
+            WriteGZ.Compress(filePath);
         }
 
 

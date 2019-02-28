@@ -233,9 +233,9 @@ namespace MergeAddressesAndBuildings
         private void MarkEdited(BaseOSM building)
         {
             building.InnerAttributes.Add("action", "modify");
-            Int64 version = Convert.ToInt64(building.InnerAttributes["version"]);
-            version++;
-            building.InnerAttributes["version"] = version.ToString();
+            //Int64 version = Convert.ToInt64(building.InnerAttributes["version"]);
+            //version++;
+            //building.InnerAttributes["version"] = version.ToString();
         }
 
         /// <summary>

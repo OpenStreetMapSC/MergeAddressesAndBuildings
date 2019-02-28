@@ -42,7 +42,6 @@ namespace MergeAddressesAndBuildings
         {
             var overpassScript = BuildingAddrOverpassScript.Replace("%COUNTYNAME%", countyName);
             overpassScript = overpassScript.Replace("%STATEABBR%", stateAbbreviation);
-            Console.WriteLine(overpassScript);
             using (var binaryStream = new BinaryWriter(File.Open(outputFilename, FileMode.Create)))
             {
                 FetchToStream(overpassScript, binaryStream, countyName);
