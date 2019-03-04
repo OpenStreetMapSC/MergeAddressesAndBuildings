@@ -57,6 +57,9 @@ namespace MergeAddressesAndBuildings
             return bbox;
         }
 
+        public double BucketWidth { get; private set; }
+        public double BucketHeight { get; private set; }
+
 
         /// <summary>
         /// Divide into squares
@@ -80,6 +83,9 @@ namespace MergeAddressesAndBuildings
 
             bucketLat = (outerBbox.MaxLat - outerBbox.MinLat) / NVertical;
             bucketLon = (outerBbox.MaxLon - outerBbox.MinLon) / NHorizontal;
+
+            BucketWidth = bucketLon;
+            BucketHeight = bucketLat;
 
         }
 

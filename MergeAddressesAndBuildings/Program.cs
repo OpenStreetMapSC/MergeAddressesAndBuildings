@@ -26,6 +26,7 @@ namespace MergeAddressesAndBuildings
     {
 
         private static Arguments CommandLine;
+        private static uint taskManagerSize = 2000; // Meters, default
 
 
         static void Main(string[] args)
@@ -51,12 +52,23 @@ namespace MergeAddressesAndBuildings
             var newMSBuildingsFilePath = ValidateArgument("NewBuildings", true, true);
             var newAddressesFilePath = ValidateArgument("NewAddresses", true, true);
 
+            var strTaskManagerSize = ValidateArgument("TaskManagerSize", false, false);
+            if (strTaskManagerSize != null)
+            {
+                if (!UInt32.TryParse(strTaskManagerSize, out taskManagerSize))
+                {
+                    throw new Exception($"Expected positive number for TaskManagerSize, got {strTaskManagerSize}\n\n");
+                }
+                if (taskManagerSize < 10 || taskManagerSize > 50000)
+                {
+                    throw new Exception($"Unexpected size of {taskManagerSize} for argument TaskMangerSize.  A good number would be between 500 to 5000 to get the desired task data sizes.\n\n");
+                }
+            }
 
             var resultFolder = ValidateArgument("ResultFolder", true, false);
             if (!Directory.Exists(resultFolder))
             {
-                Console.WriteLine($"Directory '{resultFolder}' from argument 'ResultFolder' not found.");
-                ShowHelp();
+                Directory.CreateDirectory(resultFolder);
             }
             var countyName = ValidateArgument("County", true, false);
             var stateAbbreviation = ValidateArgument("State", true, false);
@@ -148,7 +160,7 @@ namespace MergeAddressesAndBuildings
             var mergedDataset = OSMDataset.CombineDatasets(osmDataList);
 
             var taskingInterface = new TaskingInterface();
-            var taskBuckets = new Buckets(osmCountyBorder.osmWays, 2000 /* meters */);
+            var taskBuckets = new Buckets(osmCountyBorder.osmWays, taskManagerSize /* meters */);
             taskingInterface.WriteTasks(resultFolder, mergedDataset, taskBuckets);
 
         }
@@ -207,7 +219,8 @@ namespace MergeAddressesAndBuildings
 
             Console.WriteLine();
             Console.WriteLine( "MergeAddressesAndBuildings Usage:");
-            Console.WriteLine(@"  MergeAddressesAndBuildings /NewBuildings=""filepath.geojson"" /NewAddresses=""filepath.osm"" /County=""Name in OSM"" /ResultFolder=""Existing Directory"" /State=""2LetterStateAbbreviation"" ");
+            Console.WriteLine(@"  MergeAddressesAndBuildings /NewBuildings=""filepath.geojson"" /NewAddresses=""filepath.osm"" /County=""Name in OSM"" /ResultFolder=""Existing Directory"" /State=""2LetterStateAbbreviation"" [/TaskManagerSize=N] ");
+            Console.WriteLine("  TaskManagerSize is in Meters, defaults to 2000 unless specified ");
             Console.WriteLine( "  For example: ");
             Console.WriteLine(@"  MergeAddressesAndBuildings  /NewBuildings=""C:\users\me\OSM\SouthCarolina.geojson"" /NewAddresses=""C:\users\me\OSM\NewAddresses.osm"" /County=""Spartanburg County"" /State=""SC"" /ResultFolder=""C:\users\me\OSM\Merged"" ");
 

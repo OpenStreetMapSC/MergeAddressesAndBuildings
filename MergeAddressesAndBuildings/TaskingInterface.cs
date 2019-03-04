@@ -16,6 +16,7 @@ namespace MergeAddressesAndBuildings
         public List<TaskingManagerTask> TaskingManagerTasks { get; set; }
 
         private OSMDataset[] osmDataSections;
+        private int[] xMergeCount; // Number of tasks merged into this task
 
         // For each node, the list of connected ways so that ways sharing nodes are properly handled
         private Dictionary<OSMNode, List<OSMWay>> connectedWays;
@@ -31,7 +32,9 @@ namespace MergeAddressesAndBuildings
         {
             osmDataset.ResetUsedFlag();
 
-            osmDataSections = new OSMDataset[taskBuckets.NHorizontal * taskBuckets.NVertical];
+            var cellCount = taskBuckets.NHorizontal * taskBuckets.NVertical;
+            osmDataSections = new OSMDataset[cellCount];
+            xMergeCount = new int[cellCount];
 
             InitializeConnectedWays(osmDataset);
 
@@ -49,7 +52,6 @@ namespace MergeAddressesAndBuildings
                 }
             }
 
-            // Assumption : no shared nodes between buildings
             foreach (var way in osmDataset.osmWays.Values)
             {
                 if (!way.IsUsed)
@@ -72,10 +74,72 @@ namespace MergeAddressesAndBuildings
                 }
             }
 
+            CombineSmallAdjacentBlocks(taskBuckets);
+
             WriteFileSections(taskBuckets, outputFilePath);
 
             WriteTaskGeoJSON(taskBuckets, outputFilePath);
         }
+
+
+        private void CombineSmallAdjacentBlocks(Buckets taskBuckets)
+        {
+            int MaxMerge = 4;  // Cells
+
+            // Find average node count per task
+            int sum = 0;
+            int nTasks = 0;
+            for (int cell = 0; cell < osmDataSections.Length; cell++)
+            {
+                if (osmDataSections[cell] != null)
+                {
+                    nTasks++;
+                    sum += osmDataSections[cell].osmNodes.Count;
+                }
+            }
+            if (nTasks == 0)
+            {
+                Console.WriteLine("Warning - no task data found");
+                return;
+            }
+            int average = sum / nTasks;
+
+            Console.WriteLine($"Info: Average Task Manager task size is {average} nodes");
+
+            // Combine adjacent X cells if combined total would be less than the average.
+            // Limit max merge to prevent run-on cell that would exceed JOSM download size
+            for (int cell = 0; cell < osmDataSections.Length-1; cell++)
+            {
+                if (osmDataSections[cell] != null && osmDataSections[cell+1] != null)
+                {
+                    // 2 adjacent tasks have data
+                    (var x, var y) = GetXY(taskBuckets, cell);
+                    if (x < (taskBuckets.NHorizontal - 1))
+                    {
+                        // The first (current) cell is not on the right edge
+                        var newSum = (osmDataSections[cell].osmNodes.Count + osmDataSections[cell + 1].osmNodes.Count);
+                        if ((newSum < average) && (xMergeCount[cell] < MaxMerge))
+                        {
+                            // Combine tasks
+                            var combineList = new List<OSMDataset>();
+                            combineList.Add(osmDataSections[cell]);
+                            combineList.Add(osmDataSections[cell + 1]);
+
+                            // Place result into next cell and clear current cell
+                            osmDataSections[cell + 1] = OSMDataset.CombineDatasets(combineList);
+                            osmDataSections[cell] = null;
+                            xMergeCount[cell + 1] += xMergeCount[cell];
+                            xMergeCount[cell] = 0;
+
+                        }
+                    }
+
+
+                }
+            }
+        }
+
+
 
         private void InitializeConnectedWays(OSMDataset osmDataset)
         {
@@ -112,7 +176,7 @@ namespace MergeAddressesAndBuildings
                 {
                     (var x, var y) = GetXY(taskBuckets, cell);
 
-                    tasks.Features.Add(CreateTask(taskBuckets, x, y));
+                    tasks.Features.Add(CreateTask(taskBuckets, x, y, xMergeCount[cell]));
                 }
             }
 
@@ -125,9 +189,14 @@ namespace MergeAddressesAndBuildings
 
         }
 
-        private Feature CreateTask(Buckets taskBuckets, int x, int y)
+        private Feature CreateTask(Buckets taskBuckets, int x, int y, int multiplier)
         {
             var bbox = taskBuckets.GetBBox(x, y);
+            if (multiplier > 1)
+            {
+                // Area includes previous N-1 cells to the left
+                bbox.MinLon = bbox.MaxLon - taskBuckets.BucketWidth * multiplier;
+            }
             var properties = new Dictionary<string, object>();
             //properties.Add("taskX", x); // Ignored
             //properties.Add("taskY", y); // Ignored
@@ -175,6 +244,8 @@ namespace MergeAddressesAndBuildings
 
         private void WriteFileSection(OSMDataset oSMDataset, int x, int y, string outputFilePath)
         {
+            //Console.WriteLine($"{x},{y},{oSMDataset.osmWays.Count}");
+
             var taskFolder = Path.Combine(outputFilePath, "Tasks");
             if (!Directory.Exists(taskFolder)) Directory.CreateDirectory(taskFolder);
 
@@ -185,6 +256,7 @@ namespace MergeAddressesAndBuildings
             WriteOSM.WriteDocument(filePath, osmList);
 
             WriteGZ.Compress(filePath);
+            File.Delete(filePath); // Leave only compressed .GZ file
         }
 
 
@@ -223,16 +295,20 @@ namespace MergeAddressesAndBuildings
         /// <returns></returns>
         private (int x, int y) GetXY(Buckets taskBuckets, int cell)
         {
-            int y = cell % taskBuckets.NVertical;
-            int x = cell / taskBuckets.NVertical;
+            int x = cell % taskBuckets.NVertical;
+            int y = cell / taskBuckets.NVertical;
 
             return (x, y);
         }
 
         private OSMDataset GetSectionData(Buckets taskBuckets, int x, int y)
         {
-            var cell = x * taskBuckets.NVertical + y;
-            if (osmDataSections[cell] == null) osmDataSections[cell] = new OSMDataset();
+            var cell = x + taskBuckets.NVertical * y;
+            if (osmDataSections[cell] == null)
+            {
+                osmDataSections[cell] = new OSMDataset();
+                xMergeCount[cell] = 1;
+            }
             return osmDataSections[cell];
         }
 
