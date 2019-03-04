@@ -21,7 +21,8 @@ addresses are uploaded as nodes.
 
 * Result: Multiple task .OSM.GZ compressed files, ready for JOSM import with task.
 
-##Usage
+## Usage
+
 Upload the compressed Task data files to a public web site.  Note the URL needed to access the data, then put *{import_filename}* at the end.
 
 In the US Tasking manager - for the Per Task Instructions, it might read like
