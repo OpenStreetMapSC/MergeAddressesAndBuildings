@@ -89,12 +89,19 @@ namespace MergeAddressesAndBuildings
             // Find average node count per task
             int sum = 0;
             int nTasks = 0;
+            int nMax = 0;
             for (int cell = 0; cell < osmDataSections.Length; cell++)
             {
                 if (osmDataSections[cell] != null)
                 {
+                    var thisCount = osmDataSections[cell].osmNodes.Count;
+
                     nTasks++;
-                    sum += osmDataSections[cell].osmNodes.Count;
+                    sum += thisCount;
+                    if (thisCount > nMax)
+                    {
+                        nMax = thisCount;
+                    }
                 }
             }
             if (nTasks == 0)
@@ -104,7 +111,7 @@ namespace MergeAddressesAndBuildings
             }
             int average = sum / nTasks;
 
-            Console.WriteLine($"Info: Average Task Manager task size is {average} nodes");
+            Console.WriteLine($"Info: Average Task Manager task size is {average} nodes, Max was {nMax} ");
 
             // Combine adjacent X cells if combined total would be less than the average.
             // Limit max merge to prevent run-on cell that would exceed JOSM download size
@@ -295,15 +302,15 @@ namespace MergeAddressesAndBuildings
         /// <returns></returns>
         private (int x, int y) GetXY(Buckets taskBuckets, int cell)
         {
-            int x = cell % taskBuckets.NVertical;
-            int y = cell / taskBuckets.NVertical;
+            int x = cell % taskBuckets.NHorizontal;
+            int y = cell / taskBuckets.NHorizontal;
 
             return (x, y);
         }
 
         private OSMDataset GetSectionData(Buckets taskBuckets, int x, int y)
         {
-            var cell = x + taskBuckets.NVertical * y;
+            var cell = taskBuckets.NHorizontal * y + x;
             if (osmDataSections[cell] == null)
             {
                 osmDataSections[cell] = new OSMDataset();
