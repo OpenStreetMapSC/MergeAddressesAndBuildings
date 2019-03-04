@@ -19,7 +19,7 @@ Result: One large .OSM file ready for JOSM upload.   For information only - too 
 
 Result: OSM US Task manager GeoJSON task definition file
 
-Result: Multiple task .OSM files, ready for JOSM import with task.
+Result: Multiple task .OSM.GZ compressed files, ready for JOSM import with task.
 
 ![Block Diagram](https://raw.githubusercontent.com/OpenStreetMapSC/MergeAddressesAndBuildings/master/Doc/ProgramFlow.jpg)
 
@@ -28,11 +28,11 @@ Notes:
   Currently Fetch.cs is US-oriented regarding State / County administrative boundary hierarchy  - adapt as required.
 
 MergeAddressesAndBuildings Usage:
-  MergeAddressesAndBuildings /NewBuildings="filepath" /NewAddresses="filepath" /County="Name in OSM" /ResultFolder="Existing Directory" /State="2LetterStateAbbreviation"
+  MergeAddressesAndBuildings /NewBuildings="filepath" /NewAddresses="filepath" /County="Name in OSM" /ResultFolder="Existing Directory" /State="2LetterStateAbbreviation" [ /TaskManagerSize=N ]
 
   For example:
 
-  MergeAddressesAndBuildings  /NewBuildings="C:\users\me\OSM\SouthCarolina.geojson" /NewAddresses="C:\users\me\OSM\NewAddresses.osm" /County="Spartanburg County" /State="SC" /ResultFolder="C:\users\me\OSM\Merged"
+  MergeAddressesAndBuildings  /NewBuildings="C:\users\me\OSM\SouthCarolina.geojson" /NewAddresses="C:\users\me\OSM\NewAddresses.osm" /County="Spartanburg County" /State="SC" /ResultFolder="C:\users\me\OSM\Merged" /TaskManagerSize=2000
 (also accepts dash for parameter)
 
   MergeAddressesAndBuildings  -NewBuildings="C:\users\me\OSM\SouthCarolina.geojson" -NewAddresses="C:\users\me\OSM\NewAddresses.osm" -County="Spartanburg County" -State="SC" -ResultFolder="C:\users\me\OSM\Merged"
