@@ -6,20 +6,27 @@ Tested with Windows 64 bit, but should be able to generate a 64-bit Linux execut
 
 Tools: Visual Studio 2017
 
-Input: .OSM file containing new point Address data (formatted and ready for upload) . 2 million max (because of starting ID numbering when creating new buildings)
+* Input: .OSM file containing new point Address data (formatted and ready for upload) . 2 million max (because of starting ID numbering when creating new buildings)
 
-Input: .geojson file containing new building footprints
+* Input: .geojson file containing new building footprints
 
-Action - attach address nodes to new buildings and existing OSM buildings when possible.  Remaining
+* Action - attach address nodes to new buildings and existing OSM buildings when possible.  Remaining
 addresses are uploaded as nodes.
 
-Interim Result: One large .OSM file 'newBuildings.osm' containing all new buildings, clipped to county boundary.   For information only.
+* Interim Result: One large .OSM file 'newBuildings.osm' containing all new buildings, clipped to county boundary.   For information only.
 
-Result: One large .OSM file ready for JOSM upload.   For information only - too large to validate and upload in one pass.
+* Result: One large .OSM file ready for JOSM upload.   For information only - too large to validate and upload in one pass.
 
-Result: OSM US Task manager GeoJSON task definition file
+* Result: OSM US Task manager GeoJSON task definition file
 
-Result: Multiple task .OSM.GZ compressed files, ready for JOSM import with task.
+* Result: Multiple task .OSM.GZ compressed files, ready for JOSM import with task.
+
+##Usage
+Upload the compressed Task data files to a public web site.  Note the URL needed to access the data, then put *{import_filename}* at the end.
+
+In the US Tasking manager - for the Per Task Instructions, it might read like
+
+    "This task involves loading extra data. Click [here](http://localhost:8111/import?new_layer=true&url=http://greenvilleopenmap.info/SpartanburgData/{import_filename})
 
 ![Block Diagram](https://raw.githubusercontent.com/OpenStreetMapSC/MergeAddressesAndBuildings/master/Doc/ProgramFlow.jpg)
 
@@ -33,7 +40,9 @@ MergeAddressesAndBuildings Usage:
   For example:
 
   MergeAddressesAndBuildings  /NewBuildings="C:\users\me\OSM\SouthCarolina.geojson" /NewAddresses="C:\users\me\OSM\NewAddresses.osm" /County="Spartanburg County" /State="SC" /ResultFolder="C:\users\me\OSM\Merged" /TaskManagerSize=2000
+
 (also accepts dash for parameter)
 
   MergeAddressesAndBuildings  -NewBuildings="C:\users\me\OSM\SouthCarolina.geojson" -NewAddresses="C:\users\me\OSM\NewAddresses.osm" -County="Spartanburg County" -State="SC" -ResultFolder="C:\users\me\OSM\Merged"
+
 
