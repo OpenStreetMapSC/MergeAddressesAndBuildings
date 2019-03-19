@@ -185,7 +185,7 @@ namespace MergeAddressesAndBuildings
         /// <summary>
         /// Look for unique address node defined on building object
         /// </summary>
-        /// <param name="building"></param>
+        /// <param name="building">As way or relation</param>
         private void AttachAddressTo(BaseOSM building, BBox bbox)
         {
             var searchRadius = GetSearchRadius(building.Lat, building.Lon, bbox);
@@ -241,14 +241,13 @@ namespace MergeAddressesAndBuildings
         /// <summary>
         /// Search for a single address within specified radius
         /// </summary>
-        /// <param name="building"></param>
+        /// <param name="building">As way or relation</param>
         /// <param name="radius">Radius, meters</param>
         /// <param name="nFound">Actual number found to distinguish between 0 or 2+ found</param>
         /// <returns>Single address, or null if zero or more than 1</returns>
         private OSMNode FindAttachedAddress(BaseOSM building, double radius, ref int nFound)
         {
-            nFound = 0;
-            BaseOSM addrNode = null;
+            var addrNodes = new List<BaseOSM>();
             (var xList, var yList) = buckets.ReturnBucketList(building.Lat, building.Lon);
             for (int i=0; i< xList.Count; i++)
             {
@@ -260,15 +259,74 @@ namespace MergeAddressesAndBuildings
                         var distance = SpatialUtilities.Distance(building.Lat, osmNode.Lat, building.Lon, osmNode.Lon);
                         if (distance < radius)
                         {
-                            addrNode = osmNode;
-                            nFound++;
+                            addrNodes.Add(osmNode);
                         }
                     }
                 }
             }
-            if (nFound > 1) addrNode = null;  // Consider only if found 1 unique address
-            return addrNode as OSMNode;
+
+            if (addrNodes.Count > 1)
+            {
+                // Run longer exact algorithm to see if there really is just one node that doesn't 
+                // match a simple radius check
+                RemoveUncontainedNodes(building, addrNodes);
+            }
+
+            nFound = addrNodes.Count;
+            if (nFound == 1)
+            {
+                return addrNodes[0] as OSMNode;
+            }
+            return null;
         }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="building">Way or relation</param>
+        /// <param name="addrNodes"></param>
+        private void RemoveUncontainedNodes(BaseOSM building, List<BaseOSM> addrNodes)
+        {
+            ClipBoundary clipBoundaryTest=null;
+            switch (building)
+            {
+                case OSMWay buildingWay:
+                    clipBoundaryTest = new ClipBoundary(buildingWay);
+                    break;
+                case OSMRelation buildingRelation:
+                    var relationList = new Dictionary<long, OSMRelation>();  // As expected by function
+                    relationList.Add(buildingRelation.ID, buildingRelation);
+
+                    try
+                    {
+                        clipBoundaryTest = new ClipBoundary(relationList);
+                    }
+                    catch (Exception)
+                    {
+                        // Building contains multiple outer ways or not closed object
+                        return;
+                    }
+                    break;
+            }
+
+            if (clipBoundaryTest == null) return;
+
+            var removeList = new List<BaseOSM>();
+            foreach (OSMNode addrNode in addrNodes)
+            {
+                if (!clipBoundaryTest.IsInBoundary(addrNode))
+                {
+                    removeList.Add(addrNode);
+                }
+            }
+            
+            // Remove uncontained nodes
+            foreach (var removeNode in removeList)
+            {
+                addrNodes.Remove(removeNode);
+            }
+        }
+
 
 
         /// <summary>

@@ -23,12 +23,26 @@ namespace MergeAddressesAndBuildings
 
             foreach (var relation in relations.Values)
             {
+                // Create list of outer ways for quick match to way
+                var outerWays = new Dictionary<long, RelationMember>();
+                foreach (var member in relation.Members)
+                {
+                    if (member.MemberType == "way" && member.Role == "outer")
+                    {
+                        outerWays.Add(member.Ref, member);
+                    }
+                }
+
+
                 // Create working list of ways
                 var ways = new List<OSMWay>();
                 foreach (var way in relation.OSMWays)
                 {
-                    boundaryBbox = SpatialUtilities.BboxUnion(boundaryBbox, way.Bbox);
-                    ways.Add(way);
+                    if (outerWays.ContainsKey(way.ID))
+                    {
+                        boundaryBbox = SpatialUtilities.BboxUnion(boundaryBbox, way.Bbox);
+                        ways.Add(way);
+                    }
                 }
 
 
@@ -36,7 +50,7 @@ namespace MergeAddressesAndBuildings
                 OSMNode lastNode = null;
                 while (ways.Count > 0)
                 {
-                    List<OSMNode> nodeList = FindConnectingNodeList(lastNode, ways);
+                    List<OSMNode> nodeList = FindConnectingNodeList(relation.ID, lastNode, ways);
                     foreach (var node in nodeList)
                     {
                         var coordinate = new Coordinate(node.Lat, node.Lon);
@@ -49,13 +63,28 @@ namespace MergeAddressesAndBuildings
 
         }
 
+
+        public ClipBoundary(OSMWay osmWay)
+        {
+
+            boundaryBbox = osmWay.Bbox;
+            boundaryCoordinates = new List<Coordinate>();
+            foreach (var node in osmWay.NodeList)
+            {
+                var coordinate = new Coordinate(node.Lat, node.Lon);
+                boundaryCoordinates.Add(coordinate);
+            }
+        }
+
+
+
         /// <summary>
         /// Find next connecting node in the list of ways.
         /// </summary>
         /// <param name="lastNode"></param>
         /// <param name="ways">List of ways to search.   Remove way when found</param>
         /// <returns>List of nodes, in ascending order (reversed from way if necessary)</returns>
-        private List<OSMNode> FindConnectingNodeList(OSMNode lastNode, List<OSMWay> ways)
+        private List<OSMNode> FindConnectingNodeList(long relationID, OSMNode lastNode, List<OSMWay> ways)
         {
 
 
@@ -95,7 +124,7 @@ namespace MergeAddressesAndBuildings
 
             if (foundWay == null)
             {
-                throw new Exception($"Gap in county border - could not connect ways into linestring.");
+                throw new Exception($"Gap in relation ID {relationID} outer ways - could not connect ways into linestring.");
             }
 
             ways.Remove(foundWay);
