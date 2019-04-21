@@ -115,7 +115,6 @@ namespace MergeAddressesAndBuildings
             {
                 // Building near exactly 1 node
                 AttachNode(building, addNode, addrBucket);
-                actionCount++;
             }
 
         }
@@ -191,7 +190,6 @@ namespace MergeAddressesAndBuildings
             {
                 // Building contains exactly 1 node
                 AttachNode(building, addNode, addrBucket);
-                actionCount++;
             }
 
         }
