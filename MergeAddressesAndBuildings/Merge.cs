@@ -45,18 +45,190 @@ namespace MergeAddressesAndBuildings
             DivideNewAddressesIntoBuckets();
             RemoveNewDuplicateAddresses();
 
-            DivideNewAddressesIntoBuckets();  // This effectively also removes the above duplicate address from index buckets
-            AttachAddressesToNewBuildings();
+            AttachInteriorAddresses();
+            AttachNearbyAddresses();
+        }
 
-            DivideNewAddressesIntoBuckets();  // This effectively also removes the above duplicate address from index buckets
-            AttachAddressesToExistingBuildings();
+        private void AttachNearbyAddresses()
+        {
+            actionCount = 0;
+            AttachNearbyAddressesTo(osmData);
+            AttachNearbyAddressesTo(newBuildings);
+
+            Console.WriteLine($" - Attached {actionCount:N0} nearby addresses");
+        }
+
+        /// <summary>
+        /// Attach addresses to buildings near a single address
+        /// </summary>
+        private void AttachNearbyAddressesTo(OSMDataset buildings)
+        {
+            foreach (var building in buildings.osmWays.Values)
+            {
+                AttachNearbyhAddressTo(building, building.Bbox);
+            }
+            foreach (var building in buildings.osmRelations.Values)
+            {
+                AttachNearbyhAddressTo(building, building.Bbox);
+            }
+
         }
 
 
+
         /// <summary>
-        /// See if any existing building conflicts with new building
+        /// Look for unique address node defined near building object
         /// </summary>
-        private void CheckDuplicateBuilding()
+        /// <param name="building">As way or relation</param>
+        private void AttachNearbyhAddressTo(BaseOSM building, BBox bbox)
+        {
+            if (building.Tags.ContainsKey("addr:housenumber") ||
+                building.InnerAttributes.ContainsKey("action")) return; // Address already attached or already edited
+
+
+            var searchRadius = GetSearchRadius(building.Lat, building.Lon, bbox);
+            searchRadius += 5.0; // Meters - include area around building - can't extend too far without including multiple neighbor addresses
+
+            OSMNode addNode = null;  // Possible node to add
+            List<BaseOSM> addrBucket = null; // Bucket containing add node
+            int nodeCount = 0; // # of nodes found
+            (var xList, var yList) = buckets.ReturnBucketList(building.Lat, building.Lon);
+            for (int i = 0; i < xList.Count; i++)
+            {
+                var idx = ArrIndex(xList[i], yList[i]);
+                if (indexBuckets[idx] != null)
+                {
+                    foreach (OSMNode addrNode in indexBuckets[idx])
+                    {
+                        var distance = SpatialUtilities.Distance(building.Lat, addrNode.Lat, building.Lon, addrNode.Lon);
+                        if (distance < searchRadius)
+                        {
+                            addNode = addrNode;
+                            addrBucket = indexBuckets[idx];
+                            nodeCount++;
+                        }
+                    }
+                }
+            }
+
+            if (nodeCount == 1)
+            {
+                // Building near exactly 1 node
+                AttachNode(building, addNode, addrBucket);
+                actionCount++;
+            }
+
+        }
+
+
+
+
+        /// <summary>
+        /// Attach addresses to buildings containing just that single address
+        /// </summary>
+        private void AttachInteriorAddresses()
+        {
+            actionCount = 0;
+            AttachInteriorAddressesTo(osmData);
+            AttachInteriorAddressesTo(newBuildings);
+
+            Console.WriteLine($" - Attached {actionCount:N0} interior addresses");
+        }
+
+        /// <summary>
+        /// Attach addresses to buildings containing just that single address
+        /// </summary>
+        private void AttachInteriorAddressesTo(OSMDataset buildings)
+        {
+            foreach (var building in buildings.osmWays.Values)
+            {
+                AttachInteriorhAddressTo(building, building.Bbox);
+            }
+            foreach (var building in buildings.osmRelations.Values)
+            {
+                AttachInteriorhAddressTo(building, building.Bbox);
+            }
+
+        }
+
+
+
+        /// <summary>
+        /// Look for unique address node defined on building object
+        /// </summary>
+        /// <param name="building">As way or relation</param>
+        private void AttachInteriorhAddressTo(BaseOSM building, BBox bbox)
+        {
+            if (building.Tags.ContainsKey("addr:housenumber")) return; // Address already attached
+
+            OSMNode addNode = null;  // Possible node to add
+            List<BaseOSM> addrBucket = null; // Bucket containing add node
+            int nodeCount = 0; // # of nodes found
+            (var xList, var yList) = buckets.ReturnBucketList(building.Lat, building.Lon);
+            for (int i = 0; i < xList.Count; i++)
+            {
+                var idx = ArrIndex(xList[i], yList[i]);
+                if (indexBuckets[idx] != null)
+                {
+                    foreach (OSMNode addrNode in indexBuckets[idx])
+                    {
+                        // Confirm that node is within building outline
+                        if (SpatialUtilities.BBoxContains(bbox, addrNode)) // Fast test to exclude outliers
+                        {
+                            if (BuildingContainsNode(building, addrNode))
+                            {
+                                addNode = addrNode;
+                                addrBucket = indexBuckets[idx];
+                                nodeCount++;
+                            }
+
+                        }
+                    }
+                }
+            }
+
+            if (nodeCount == 1)
+            {
+                // Building contains exactly 1 node
+                AttachNode(building, addNode, addrBucket);
+                actionCount++;
+            }
+
+        }
+
+        private void AttachNode(BaseOSM building, OSMNode addrNode, List<BaseOSM> addrBucket)
+        {
+
+            //  - Transfer tags to building and remove address node
+            bool addrAdded = false;  // Whether tag was added
+            foreach (var addrTag in addrNode.Tags.Keys)
+            {
+                var addrValue = addrNode.Tags[addrTag];
+                if (!building.Tags.ContainsKey(addrTag))
+                {
+                    building.Tags.Add(addrTag, addrValue);
+                    addrAdded = true;
+                }
+            }
+            newAddresses.osmNodes.Remove(addrNode.ID); // Existing data already tagged
+            addrBucket.Remove(addrNode);
+            if (addrAdded)
+            {
+                actionCount++;
+                if (building.ID > 0)
+                {
+                    MarkEdited(building);
+                }
+            }
+        }
+
+
+
+
+            /// <summary>
+            /// See if any existing building conflicts with new building
+            /// </summary>
+            private void CheckDuplicateBuilding()
         {
             actionCount = 0;
             DivideNewBuildingsIntoBuckets();
@@ -92,6 +264,9 @@ namespace MergeAddressesAndBuildings
             }
         }
 
+        /// <summary>
+        /// Remove new addresses already defined in OSM
+        /// </summary>
         private void RemoveNewDuplicateAddresses()
         {
             actionCount = 0;
@@ -130,6 +305,7 @@ namespace MergeAddressesAndBuildings
                 var idx = ArrIndex(xList[i], yList[i]);
                 if (indexBuckets[idx] != null)
                 {
+                    var addrRemoveList = new List<OSMNode>();
                     foreach (OSMNode newAddrNode in indexBuckets[idx])
                     {
                         if (newAddrNode.Tags.ContainsKey("addr:housenumber") &&
@@ -139,93 +315,24 @@ namespace MergeAddressesAndBuildings
                                 newAddrNode.Tags["addr:street"] == osmAddrObject.Tags["addr:street"])
                             {
                                 newAddresses.osmNodes.Remove(newAddrNode.ID);
+                                addrRemoveList.Add(newAddrNode);
                                 actionCount++;
                             }
                         }
                     }
-                }
-            }
-        }
 
-
-        private void AttachAddressesToExistingBuildings()
-        {
-            actionCount = 0;
-
-            // Buildings can be closed polygon or relation
-            foreach (var building in osmData.osmWays.Values)
-            {
-                AttachAddressTo(building, building.Bbox);
-            }
-            foreach (var building in osmData.osmRelations.Values)
-            {
-                AttachAddressTo(building, building.Bbox);
-            }
-
-            Console.WriteLine($" - Attached {actionCount:N0} addresses to existing buildings");
-        }
-
-        private void AttachAddressesToNewBuildings()
-        {
-            actionCount = 0;
-
-            // Buildings can be closed polygon or relation
-            foreach ( var building in newBuildings.osmWays.Values)
-            {
-                AttachAddressTo(building, building.Bbox);
-            }
-            foreach (var building in newBuildings.osmRelations.Values)
-            {
-                AttachAddressTo(building, building.Bbox);
-            }
-
-            Console.WriteLine($" - Attached {actionCount:N0} addresses to new buildings");
-        }
-
-        /// <summary>
-        /// Look for unique address node defined on building object
-        /// </summary>
-        /// <param name="building">As way or relation</param>
-        private void AttachAddressTo(BaseOSM building, BBox bbox)
-        {
-            var searchRadius = GetSearchRadius(building.Lat, building.Lon, bbox);
-            int nFound = 0;
-            OSMNode addrNode = FindAttachedAddress(building, searchRadius, ref nFound);
-            if (nFound == 0)
-            {
-                // Expand radius to catch address node not on building, but nearby
-                // Assumption: most address nodes are in the center of buildings
-                //    A few are on parcel but missed the building.
-                searchRadius += 20.0; // Meters
-                addrNode = FindAttachedAddress(building, searchRadius, ref nFound);
-            }
-            if (nFound == 1)
-            {
-                // Likely successful at locating the associated address:
-                //  - Transfer tags to building and remove address node
-                bool addrAdded = false;  // Whether tag was added
-                foreach(var addrTag in addrNode.Tags.Keys)
-                {
-                    var addrValue = addrNode.Tags[addrTag];
-                    if (!building.Tags.ContainsKey(addrTag))
+                    // Also remove node from bucket
+                    foreach(var removeNode in addrRemoveList)
                     {
-                        building.Tags.Add(addrTag, addrValue);
-                        addrAdded = true;
-                    }
-                }
-                newAddresses.osmNodes.Remove(addrNode.ID); // Existing data already tagged
-                if (addrAdded)
-                {
-                    actionCount++;
-                    if (building.ID > 0)
-                    {
-                        MarkEdited(building);
+                        indexBuckets[idx].Remove(removeNode);
                     }
                 }
             }
-
         }
 
+
+
+       
         /// <summary>
         /// Update OSM object attributes to show edited and trigger upload
         /// </summary>
@@ -238,56 +345,11 @@ namespace MergeAddressesAndBuildings
             //building.InnerAttributes["version"] = version.ToString();
         }
 
-        /// <summary>
-        /// Search for a single address within specified radius
-        /// </summary>
-        /// <param name="building">As way or relation</param>
-        /// <param name="radius">Radius, meters</param>
-        /// <param name="nFound">Actual number found to distinguish between 0 or 2+ found</param>
-        /// <returns>Single address, or null if zero or more than 1</returns>
-        private OSMNode FindAttachedAddress(BaseOSM building, double radius, ref int nFound)
+
+
+        private bool BuildingContainsNode(BaseOSM building, OSMNode testNode)
         {
-            var addrNodes = new List<BaseOSM>();
-            (var xList, var yList) = buckets.ReturnBucketList(building.Lat, building.Lon);
-            for (int i=0; i< xList.Count; i++)
-            {
-                var idx = ArrIndex(xList[i], yList[i]);
-                if (indexBuckets[idx] != null)
-                {
-                    foreach (var osmNode in indexBuckets[idx])
-                    {
-                        var distance = SpatialUtilities.Distance(building.Lat, osmNode.Lat, building.Lon, osmNode.Lon);
-                        if (distance < radius)
-                        {
-                            addrNodes.Add(osmNode);
-                        }
-                    }
-                }
-            }
-
-            if (addrNodes.Count > 1)
-            {
-                // Run longer exact algorithm to see if there really is just one node that doesn't 
-                // match a simple radius check
-                RemoveUncontainedNodes(building, addrNodes);
-            }
-
-            nFound = addrNodes.Count;
-            if (nFound == 1)
-            {
-                return addrNodes[0] as OSMNode;
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="building">Way or relation</param>
-        /// <param name="addrNodes"></param>
-        private void RemoveUncontainedNodes(BaseOSM building, List<BaseOSM> addrNodes)
-        {
-            ClipBoundary clipBoundaryTest=null;
+            ClipBoundary clipBoundaryTest = null;
             switch (building)
             {
                 case OSMWay buildingWay:
@@ -304,27 +366,14 @@ namespace MergeAddressesAndBuildings
                     catch (Exception)
                     {
                         // Building contains multiple outer ways or not closed object
-                        return;
+                        return false;
                     }
                     break;
             }
 
-            if (clipBoundaryTest == null) return;
+            if (clipBoundaryTest == null) return false;
 
-            var removeList = new List<BaseOSM>();
-            foreach (OSMNode addrNode in addrNodes)
-            {
-                if (!clipBoundaryTest.IsInBoundary(addrNode))
-                {
-                    removeList.Add(addrNode);
-                }
-            }
-            
-            // Remove uncontained nodes
-            foreach (var removeNode in removeList)
-            {
-                addrNodes.Remove(removeNode);
-            }
+            return clipBoundaryTest.IsInBoundary(testNode);
         }
 
 
