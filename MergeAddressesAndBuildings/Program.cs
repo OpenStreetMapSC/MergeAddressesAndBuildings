@@ -103,7 +103,7 @@ namespace MergeAddressesAndBuildings
 
             if (!File.Exists(newOsmBuildingsFilename))
             {
-                if (newInputBuildingsFilePath.EndsWith(".JSON", StringComparison.OrdinalIgnoreCase))
+                if (newInputBuildingsFilePath.EndsWith("JSON", StringComparison.OrdinalIgnoreCase))
                 {
                     Console.WriteLine("Reading Microsoft Building data...");
                     var readMSBuildings = new ReadMSBuildings();
