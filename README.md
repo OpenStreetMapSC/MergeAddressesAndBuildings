@@ -4,11 +4,13 @@ C# Dotnet Core code to merge address and building data for an OpenStreetMap Impo
 
 Tested with Windows 64 bit, but should be able to generate a 64-bit Linux executable
 
-Tools: Visual Studio 2017
+A 64-bit Windows executable is in the PublishedBinary folder
+
+Tools to change the source code: Visual Studio 2019 or VS Code, Dotnet core 3.0
 
 * Input: .OSM file containing new point Address data (formatted and ready for upload) . 2 million max (because of starting ID numbering when creating new buildings)
 
-* Input: .geojson file containing new building footprints
+* Buildings Input: .geojson file containing new building footprints  OR .OSM file obtained from a  GIS Shape file
 
 * Action - attach address nodes to new buildings and existing OSM buildings when possible.  Remaining
 addresses are uploaded as nodes.
@@ -46,4 +48,4 @@ MergeAddressesAndBuildings Usage:
 
   MergeAddressesAndBuildings  -NewBuildings="C:\users\me\OSM\SouthCarolina.geojson" -NewAddresses="C:\users\me\OSM\NewAddresses.osm" -County="Spartanburg County" -State="SC" -ResultFolder="C:\users\me\OSM\Merged"
 
-
+  TaskMagerSize parameter is the size of each task manager square in meters.  Multiple adjacent squares are combined if they contain relatively few objects.   Adjust to obtain the optimum task size for your area.

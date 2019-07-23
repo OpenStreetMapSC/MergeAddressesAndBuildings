@@ -21,6 +21,7 @@ namespace MergeAddressesAndBuildings
         // For each node, the list of connected ways so that ways sharing nodes are properly handled
         private Dictionary<OSMNode, List<OSMWay>> connectedWays;
 
+        private string taskFolder = null;
 
         /// <summary>
         /// Write task data file, as well as tasking manager GeoJSON definition file
@@ -30,6 +31,8 @@ namespace MergeAddressesAndBuildings
         /// <param name="taskBuckets"></param>
         public void WriteTasks(string outputFilePath, OSMDataset osmDataset, Buckets taskBuckets)
         {
+            taskFolder = Path.Combine(outputFilePath, "Tasks");
+
             osmDataset.ResetUsedFlag();
 
             var cellCount = taskBuckets.NHorizontal * taskBuckets.NVertical;
@@ -76,31 +79,53 @@ namespace MergeAddressesAndBuildings
 
             CombineSmallAdjacentBlocks(taskBuckets);
 
+            RemoveOldTaskDefinitions(outputFilePath);
+
             WriteFileSections(taskBuckets, outputFilePath);
 
             WriteTaskGeoJSON(taskBuckets, outputFilePath);
         }
 
+        /// <summary>
+        /// Remove any previous task files because task manager size may have changed
+        /// </summary>
+        private void RemoveOldTaskDefinitions(string outputFilePath)
+        {
+
+            if (!Directory.Exists(taskFolder)) return;
+            foreach (var filename in Directory.GetFiles(taskFolder, "Task-*.gZ"))
+            {
+                File.Delete(filename);
+            }
+        }
 
         private void CombineSmallAdjacentBlocks(Buckets taskBuckets)
         {
             int MaxMerge = 4;  // Cells
 
             // Find average node count per task
-            int sum = 0;
+            int sumNodes = 0;
+            int sumWays = 0;
             int nTasks = 0;
-            int nMax = 0;
+            int nMaxNodes = 0;
+            int nMaxWays = 0;
             for (int cell = 0; cell < osmDataSections.Length; cell++)
             {
                 if (osmDataSections[cell] != null)
                 {
-                    var thisCount = osmDataSections[cell].osmNodes.Count;
+                    var thisCountNodes = osmDataSections[cell].osmNodes.Count;
+                    var thisCountWays = osmDataSections[cell].osmWays.Count;
 
                     nTasks++;
-                    sum += thisCount;
-                    if (thisCount > nMax)
+                    sumNodes += thisCountNodes;
+                    sumWays += thisCountWays;
+                    if (thisCountNodes > nMaxNodes)
                     {
-                        nMax = thisCount;
+                        nMaxNodes = thisCountNodes;
+                    }
+                    if (thisCountWays > nMaxWays)
+                    {
+                        nMaxWays = thisCountWays;
                     }
                 }
             }
@@ -109,15 +134,16 @@ namespace MergeAddressesAndBuildings
                 Console.WriteLine("Warning - no task data found");
                 return;
             }
-            int average = sum / nTasks;
+            int averageNodes = sumNodes / nTasks;
+            int averageWays = sumWays / nTasks;
 
-            Console.WriteLine($"Info: Average Task Manager task size is {average} nodes, Max was {nMax} ");
+            Console.WriteLine($"Info: Average Task Manager task size is {averageNodes:N0} nodes, {averageWays:N0} ways. Maximum was {nMaxNodes:N0} nodes, {nMaxWays:N0} ways ");
 
             // Combine adjacent X cells if combined total would be less than the average.
             // Limit max merge to prevent run-on cell that would exceed JOSM download size
-            for (int cell = 0; cell < osmDataSections.Length-1; cell++)
+            for (int cell = 0; cell < osmDataSections.Length - 1; cell++)
             {
-                if (osmDataSections[cell] != null && osmDataSections[cell+1] != null)
+                if (osmDataSections[cell] != null && osmDataSections[cell + 1] != null)
                 {
                     // 2 adjacent tasks have data
                     (var x, var y) = GetXY(taskBuckets, cell);
@@ -125,7 +151,7 @@ namespace MergeAddressesAndBuildings
                     {
                         // The first (current) cell is not on the right edge
                         var newSum = (osmDataSections[cell].osmNodes.Count + osmDataSections[cell + 1].osmNodes.Count);
-                        if ((newSum < average) && (xMergeCount[cell] < MaxMerge))
+                        if ((newSum < averageNodes) && (xMergeCount[cell] < MaxMerge))
                         {
                             // Combine tasks
                             var combineList = new List<OSMDataset>();
@@ -140,8 +166,6 @@ namespace MergeAddressesAndBuildings
 
                         }
                     }
-
-
                 }
             }
         }
@@ -152,7 +176,7 @@ namespace MergeAddressesAndBuildings
         {
             // Set up empty list of connected ways to start
             connectedWays = new Dictionary<OSMNode, List<OSMWay>>();
-            foreach ( var node in osmDataset.osmNodes.Values)
+            foreach (var node in osmDataset.osmNodes.Values)
             {
                 var wayList = new List<OSMWay>();
                 connectedWays.Add(node, wayList);
@@ -239,7 +263,7 @@ namespace MergeAddressesAndBuildings
 
         private void WriteFileSections(Buckets taskBuckets, string outputFilePath)
         {
-            for (int cell=0; cell < osmDataSections.Length; cell++)
+            for (int cell = 0; cell < osmDataSections.Length; cell++)
             {
                 if (osmDataSections[cell] != null)
                 {
@@ -323,7 +347,7 @@ namespace MergeAddressesAndBuildings
 
 
         #region "Test to read GeoJSON of task definition - not used here "
-               
+
 
         public void ReadTaskGeoJSON(string geoJsonFilePath)
         {
@@ -356,7 +380,8 @@ namespace MergeAddressesAndBuildings
                 if (tmTaskFeature.Properties["taskX"] == null)
                 {
                     borderTasks.Add(tmTaskFeature);
-                } else
+                }
+                else
                 {
                     var tmTask = new TaskingManagerTask();
                     tmTask.X = Convert.ToInt32(tmTaskFeature.Properties["taskX"]);
@@ -495,7 +520,7 @@ namespace MergeAddressesAndBuildings
             return bbox;
         }
 
-#endregion
+        #endregion
 
     }
 

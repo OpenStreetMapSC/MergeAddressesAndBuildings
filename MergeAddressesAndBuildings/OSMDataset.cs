@@ -16,6 +16,15 @@ namespace MergeAddressesAndBuildings
         public Dictionary<Int64, OSMWay> osmWays { get; set; }
         public Dictionary<Int64, OSMRelation> osmRelations { get; set; }
 
+        public BBox OuterBbox()
+        {
+            var bbox = new BBox();
+            foreach (var node in osmNodes.Values)
+            {
+                bbox = SpatialUtilities.BboxUnion(bbox, node);
+            }
+            return bbox;
+        }
 
         public OSMDataset()
         {

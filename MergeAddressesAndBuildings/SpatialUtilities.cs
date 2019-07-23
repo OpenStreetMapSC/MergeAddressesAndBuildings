@@ -24,6 +24,37 @@ namespace MergeAddressesAndBuildings
         }
 
 
+        public static double DegreeToRadians(double degrees)
+        {
+            return degrees * Math.PI / 180.0;
+        }
+
+
+        public static double RadianToDegree(double angle)
+        {
+            return angle * (180.0 / Math.PI);
+        }
+
+
+        /// <summary>
+        /// Computes the distance between this coordinate and another point on the earth.
+        /// Uses spherical law of cosines formula, not Haversine.
+        /// </summary>
+        /// <param name="other">The other point</param>
+        /// <returns>Distance in meters</returns>
+        public static double GreatCircleDistance(double lat1, double lat2, double lon1, double lon2)
+        {
+            var epsilon = Math.Abs(lon1-lon2) + Math.Abs(lat1 - lat2);
+            if (epsilon < 1.0e-6) return 0.0;
+
+            double meters = (Math.Acos(
+                    Math.Sin(DegreeToRadians(lat1)) * Math.Sin(DegreeToRadians(lat2)) +
+                    Math.Cos(DegreeToRadians(lat1)) * Math.Cos(DegreeToRadians(lat2)) *
+                    Math.Cos(DegreeToRadians(lon2 - lon1))) * 6378135);
+
+            return (meters);
+        }
+
         public static void SetBboxFor(OSMWay osmWay)
         {
             foreach (var osmNode in osmWay.NodeList)
@@ -66,6 +97,25 @@ namespace MergeAddressesAndBuildings
 
             return bbox;
         }
+
+        /// <summary>
+        /// set or expand box if node not already contained
+        /// </summary>
+        /// <param name="bbox1"></param>
+        /// <param name="node"></param>
+        /// <returns></returns>
+        public static BBox BboxUnion(BBox bbox1, OSMNode node)
+        {
+            var bbox = new BBox();
+            bbox.MinLat = bbox1.MinLat < node.Lat ? bbox1.MinLat : node.Lat;
+            bbox.MinLon = bbox1.MinLon < node.Lon ? bbox1.MinLon : node.Lon;
+
+            bbox.MaxLat = bbox1.MaxLat > node.Lat ? bbox1.MaxLat : node.Lat;
+            bbox.MaxLon = bbox1.MaxLon > node.Lon ? bbox1.MaxLon : node.Lon;
+
+            return bbox;
+        }
+
 
 
         public static bool BBoxContains(BBox bbox, OSMNode osmNode)

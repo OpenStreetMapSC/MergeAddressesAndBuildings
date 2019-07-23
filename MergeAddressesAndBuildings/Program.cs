@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using CommandLine.Utility;
 using System.IO;
+using System.Linq;
 
 
 namespace MergeAddressesAndBuildings
@@ -34,12 +35,17 @@ namespace MergeAddressesAndBuildings
             try
             {
                 RunProgram(args);
-            } catch (Exception ex)
+
+                if (CommandLine["Pause"] != null)
+                {
+                    Console.Write("Press Enter");
+                    Console.ReadLine();
+                }
+            }
+            catch (Exception ex)
             {
                 Console.WriteLine("\n\n********\nProblem encountered: " + ex.ToString());
             }
-            Console.Write("Press Enter");
-            Console.ReadLine();
 
         }
 
@@ -49,7 +55,7 @@ namespace MergeAddressesAndBuildings
             // Command line parsing
             CommandLine = new Arguments(args);
 
-            var newMSBuildingsFilePath = ValidateArgument("NewBuildings", true, true);
+            var newInputBuildingsFilePath = ValidateArgument("NewBuildings", true, true);
             var newAddressesFilePath = ValidateArgument("NewAddresses", true, true);
 
             var strTaskManagerSize = ValidateArgument("TaskManagerSize", false, false);
@@ -86,6 +92,7 @@ namespace MergeAddressesAndBuildings
 
             var osmCountyBorder = new OSMDataset();
             osmCountyBorder.ReadOSMDocument(countyFile);
+            Int64 osmCountyRelationID = GetCountyOsmID(osmCountyBorder);
             if (osmCountyBorder.osmNodes.Count == 0)
             {
                 throw new Exception($"Got no data from Overpass query for {countyName} in file {countyFile} \n\n");
@@ -96,25 +103,30 @@ namespace MergeAddressesAndBuildings
 
             if (!File.Exists(newOsmBuildingsFilename))
             {
-                Console.WriteLine("Reading Microsoft Building data...");
-                var readMSBuildings = new ReadMSBuildings();
-                var newMSBuildingData = readMSBuildings.ReadGeoJSON(osmCountyBorder, newMSBuildingsFilePath);
- 
-                // Save a copy for inspection or to save time when rerunning
-                var writeList = new List<OSMDataset>();
-                writeList.Add(newMSBuildingData);
-                WriteOSM.WriteDocument(newOsmBuildingsFilename, writeList);
+                if (newInputBuildingsFilePath.EndsWith(".JSON", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine("Reading Microsoft Building data...");
+                    var readMSBuildings = new ReadMSBuildings();
+                    var newMSBuildingData = readMSBuildings.ReadGeoJSON(osmCountyBorder, newInputBuildingsFilePath);
+
+                    // Save a copy for inspection or to save time when rerunning
+                    var writeList = new List<OSMDataset>();
+                    writeList.Add(newMSBuildingData);
+                    WriteOSM.WriteDocument(newOsmBuildingsFilename, writeList);
+                } else
+                {
+                    // Assume new file is .OSM file and it will be read directly
+                    newOsmBuildingsFilename = newInputBuildingsFilePath;
+                }
             }
 
-
-            var buckets = new Buckets(osmCountyBorder.osmWays, 100 /* meters */);
 
             var currentOSMFile = Path.Combine(resultFolder, "CurrentAddrBuildings.osm");
 
             if (!File.Exists(currentOSMFile) || OutOfDate(currentOSMFile))
             {
                 Console.WriteLine($"Downloading existing building and address data from {countyName}...");
-                Fetch.FetchOSMAddrsAndBuildingsToFile(countyName, stateAbbreviation, currentOSMFile);
+                Fetch.FetchOSMAddrsAndBuildingsToFile(osmCountyRelationID, currentOSMFile);
             }
             Console.WriteLine("Reading downloaded OSM data...");
             var osmExistingData = new OSMDataset();
@@ -140,6 +152,11 @@ namespace MergeAddressesAndBuildings
             newAddresses.ReadOSMDocument(newAddressesFilePath);
             Console.WriteLine($"Found {newAddresses.osmNodes.Count:N0} new addresses");
 
+            var dataBbox = newAddresses.OuterBbox();
+            dataBbox = SpatialUtilities.BboxUnion(dataBbox, newBuildings.OuterBbox());
+            dataBbox = SpatialUtilities.BboxUnion(dataBbox, osmExistingData.OuterBbox());
+            var buckets = new Buckets(osmCountyBorder.osmWays, dataBbox, 100 /* meters */);
+
             Console.WriteLine("Merging data...");
             var merge = new Merge(buckets, newAddresses, newBuildings, osmExistingData);
             merge.PerformMerge();
@@ -160,9 +177,19 @@ namespace MergeAddressesAndBuildings
             var mergedDataset = OSMDataset.CombineDatasets(osmDataList);
 
             var taskingInterface = new TaskingInterface();
-            var taskBuckets = new Buckets(osmCountyBorder.osmWays, taskManagerSize /* meters */);
+            var taskBuckets = new Buckets(osmCountyBorder.osmWays, dataBbox, taskManagerSize /* meters */);
             taskingInterface.WriteTasks(resultFolder, mergedDataset, taskBuckets);
 
+        }
+
+        private static Int64 GetCountyOsmID(OSMDataset osmCountyBorder)
+        {
+            // Assume county relation ID is first and only relation
+            if (osmCountyBorder.osmRelations.Count != 1)
+            {
+                throw new Exception($"Expected 1 relation for county border, found {osmCountyBorder.osmRelations.Count} relations");
+            }
+            return osmCountyBorder.osmRelations.Values.First().ID;
         }
 
         /// <summary>

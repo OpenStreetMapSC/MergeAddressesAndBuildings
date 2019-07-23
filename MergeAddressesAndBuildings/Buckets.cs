@@ -26,7 +26,7 @@ namespace MergeAddressesAndBuildings
         /// </summary>
         /// <param name="outerBoundary"></param>
         /// <param name="boxSize">Square size in Meters</param>
-        public Buckets(Dictionary<Int64, OSMWay> outerBoundary, double boxSize)
+        public Buckets(Dictionary<Int64, OSMWay> outerBoundary, BBox dataLimits, double boxSize)
         {
             // Determine complete bbox
             BBox bbox = new BBox();
@@ -34,6 +34,7 @@ namespace MergeAddressesAndBuildings
             {
                 bbox = SpatialUtilities.BboxUnion(way.Bbox, bbox);
             }
+            bbox = SpatialUtilities.BboxUnion(bbox, dataLimits);
             AddBuffer(bbox);
             outerBbox = bbox;
 
@@ -67,12 +68,12 @@ namespace MergeAddressesAndBuildings
         private void CalculateSplit(double boxSize)
         {
 
-            double widthMeters = SpatialUtilities.Distance(
+            double widthMeters = SpatialUtilities.GreatCircleDistance(
                 outerBbox.MinLat,
                 outerBbox.MinLat,
                 outerBbox.MinLon,
                 outerBbox.MaxLon);
-            double heightMeters = SpatialUtilities.Distance(
+            double heightMeters = SpatialUtilities.GreatCircleDistance(
                 outerBbox.MinLat,
                 outerBbox.MaxLat,
                 outerBbox.MinLon,

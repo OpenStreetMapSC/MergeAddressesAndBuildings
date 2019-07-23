@@ -139,11 +139,11 @@ namespace MergeAddressesAndBuildings
         /// </summary>
         private void AttachInteriorAddressesTo(OSMDataset buildings)
         {
-            foreach (var building in buildings.osmWays.Values)
+            foreach (var building in buildings.osmRelations.Values)
             {
                 AttachInteriorhAddressTo(building, building.Bbox);
             }
-            foreach (var building in buildings.osmRelations.Values)
+            foreach (var building in buildings.osmWays.Values)
             {
                 AttachInteriorhAddressTo(building, building.Bbox);
             }
@@ -223,24 +223,25 @@ namespace MergeAddressesAndBuildings
 
 
 
-            /// <summary>
-            /// See if any existing building conflicts with new building
-            /// </summary>
-            private void CheckDuplicateBuilding()
+        /// <summary>
+        /// See if any existing building conflicts with new building
+        /// </summary>
+        private void CheckDuplicateBuilding()
         {
             actionCount = 0;
             DivideNewBuildingsIntoBuckets();
-            foreach (var building in osmData.osmWays.Values)
+            foreach (var building in osmData.osmRelations.Values)
             {
                 CheckOverlappedBuilding(building, building.Bbox);
             }
-            foreach (var building in osmData.osmRelations.Values)
+            foreach (var building in osmData.osmWays.Values)
             {
                 CheckOverlappedBuilding(building, building.Bbox);
             }
 
             Console.WriteLine($" - Removed {actionCount:N0} overlapping buildings");
         }
+
 
         private void CheckOverlappedBuilding(BaseOSM osmObject, BBox bbox)
         {
@@ -250,14 +251,41 @@ namespace MergeAddressesAndBuildings
                 var idx = ArrIndex(xList[i], yList[i]);
                 if (indexBuckets[idx] != null)
                 {
-                    foreach (OSMWay newBuilding in indexBuckets[idx])
+                    // Check relations and remove dups, along with member ways
+                    foreach (BaseOSM newBuilding in indexBuckets[idx])
                     {
-                        if (SpatialUtilities.BBoxIntersects(newBuilding.Bbox, bbox))
+                        if (newBuilding.GetType() == typeof(OSMRelation))
                         {
-                            newBuildings.osmWays.Remove(newBuilding.ID);
-                            actionCount++;
+                            var newRelation = newBuilding as OSMRelation;
+                            if (SpatialUtilities.BBoxIntersects(newRelation.Bbox, bbox))
+                            {
+                                actionCount++;
+                                foreach (var way in newRelation.OSMWays)
+                                {
+                                    newBuildings.osmWays.Remove(way.ID);
+                                }
+                                newBuildings.osmRelations.Remove(newRelation.ID);
+                            }
                         }
                     }
+
+
+                    // Remove duplicate buildings as ways
+                    foreach (BaseOSM newBuilding in indexBuckets[idx])
+                    {
+                        if (newBuilding.GetType() != typeof(OSMRelation))
+                        {
+                            var newWay = newBuilding as OSMWay;
+                            if (SpatialUtilities.BBoxIntersects(newWay.Bbox, bbox))
+                            {
+                                actionCount++;
+                                newBuildings.osmWays.Remove(newBuilding.ID);
+                            }
+
+                        }
+                    }
+
+
                 }
             }
         }
@@ -320,7 +348,7 @@ namespace MergeAddressesAndBuildings
                     }
 
                     // Also remove node from bucket
-                    foreach(var removeNode in addrRemoveList)
+                    foreach (var removeNode in addrRemoveList)
                     {
                         indexBuckets[idx].Remove(removeNode);
                     }
@@ -330,7 +358,7 @@ namespace MergeAddressesAndBuildings
 
 
 
-       
+
         /// <summary>
         /// Update OSM object attributes to show edited and trigger upload
         /// </summary>
@@ -407,10 +435,25 @@ namespace MergeAddressesAndBuildings
         {
             indexBuckets = new List<BaseOSM>[buckets.NHorizontal * buckets.NVertical];
 
-            foreach (var building in newBuildings.osmWays.Values)
+            var relatedWays = new List<OSMWay>();
+            foreach (var building in newBuildings.osmRelations.Values)
             {
                 (var x, var y) = buckets.ReturnBucket(building.Lat, building.Lon);
                 AddToBucket(building, x, y);
+                // Be sure member ways are in same bucket
+                foreach (var way in building.OSMWays)
+                {
+                    AddToBucket(way, x, y);
+                    relatedWays.Add(way);
+                }
+            }
+            foreach (var building in newBuildings.osmWays.Values)
+            {
+                (var x, var y) = buckets.ReturnBucket(building.Lat, building.Lon);
+                if (!relatedWays.Contains(building))
+                {
+                    AddToBucket(building, x, y);
+                }
             }
 
 
@@ -433,7 +476,8 @@ namespace MergeAddressesAndBuildings
         {
             var idx = ArrIndex(x, y);
             if (indexBuckets[idx] == null) indexBuckets[idx] = new List<BaseOSM>();
-            indexBuckets[idx].Add(osmObject);
+            if (!indexBuckets[idx].Contains(osmObject))
+                indexBuckets[idx].Add(osmObject);
         }
     }
 }

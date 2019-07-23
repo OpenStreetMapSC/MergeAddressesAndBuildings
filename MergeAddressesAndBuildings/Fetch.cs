@@ -18,33 +18,67 @@ namespace MergeAddressesAndBuildings
         //   1. All nodes, ways, and relations containing addr* tags, excluding highways
         //   2. All existing buildings (including demolished:building) 
         public const string BuildingAddrOverpassScript =
-            @"[out:xml][timeout:180];
-            area[""ISO3166-2""=""US-%STATEABBR%""][boundary=administrative]->.state;
+            @"[out:xml][timeout:300];
+            area(%AREARELATIONID%)->.county;
+            // gather results
             (
-              area (area.state)[name=""%COUNTYNAME%""][admin_level=6][boundary=administrative]->.county;
-                // gather results
-                (
-                // query part for: (wildcard key like) == * anything
-                  node(area.county)[~""addr.*""~"".*""];
-                  (way(area.county)[~""addr.*""~"".*""]; - way(area.county)[""highway""~"".*""];);
-                  relation(area.county)[~""addr.*""~"".*""];
+                node(area.county)[~""addr.*""~"".*""];
+                (way(area.county)[~""addr.*""~"".*""]; - way(area.county)[""highway""~"".*""];);
+                relation(area.county)[~""addr.*""~"".*""];
 
-                  node(area.county)[~"".*building.*""~"".*""];
-                  way(area.county)[~"".*building.*""~"".*""];
-                  relation(area.county)[~"".*building.*""~"".*""];
-                );
+                node(area.county)[~"".*building.*""~"".*""];
+                way(area.county)[~"".*building.*""~"".*""];
+                relation(area.county)[~"".*building.*""~"".*""];
             );
             (._;>;);
             out meta;";
 
+        // NOTE: Area within area is not implemented
+        //public const string BuildingAddrOverpassScript =
+        //   @"[out:xml][timeout:300];
+        //    area[""ISO3166-2""=""US-%STATEABBR%""][boundary=administrative]->.state;
+        //    (
+        //      area (area.state)[name=""%COUNTYNAME%""][admin_level=6][boundary=administrative]->.county;
+        //        // gather results
+        //        (
+        //        // query part for: (wildcard key like) == * anything
+        //          node(area.county)[~""addr.*""~"".*""];
+        //          (way(area.county)[~""addr.*""~"".*""]; - way(area.county)[""highway""~"".*""];);
+        //          relation(area.county)[~""addr.*""~"".*""];
 
-        public static void FetchOSMAddrsAndBuildingsToFile(string countyName, string stateAbbreviation, string outputFilename)
+        //          node(area.county)[~"".*building.*""~"".*""];
+        //          way(area.county)[~"".*building.*""~"".*""];
+        //          relation(area.county)[~"".*building.*""~"".*""];
+        //        );
+        //    );
+        //    (._;>;);
+        //    out meta;";
+
+
+        public static void FetchOSMAddrsAndBuildingsToFile(Int64 countyOsmRelationID, string outputFilename)
         {
-            var overpassScript = BuildingAddrOverpassScript.Replace("%COUNTYNAME%", countyName);
-            overpassScript = overpassScript.Replace("%STATEABBR%", stateAbbreviation);
-            using (var binaryStream = new BinaryWriter(File.Open(outputFilename, FileMode.Create)))
+            var overpassID = countyOsmRelationID + 3600000000;
+            var overpassScript = BuildingAddrOverpassScript.Replace("%AREARELATIONID%", overpassID.ToString());
+
+            // Debug
+            var outputDir = Path.GetDirectoryName(outputFilename);
+            var overpassDebugFile = Path.Combine(outputDir, "OverpassBuildingQuery.txt");
+            using (var overpassDebugStream = new StreamWriter(overpassDebugFile))
             {
-                FetchToStream(overpassScript, binaryStream, countyName);
+                overpassDebugStream.WriteLine(overpassScript);
+            }
+
+            try
+            {
+                using (var binaryStream = new BinaryWriter(File.Open(outputFilename, FileMode.Create)))
+                {
+                    FetchToStream(overpassScript, binaryStream);
+                }
+            }
+            catch (Exception)
+            {
+                if (File.Exists(outputFilename)) File.Delete(outputFilename);
+                throw;
             }
         }
 
@@ -64,16 +98,25 @@ namespace MergeAddressesAndBuildings
         {
             var overpassScript = CountyOutlineOverpassScript.Replace("%COUNTYNAME%", countyName);
             overpassScript = overpassScript.Replace("%STATEABBR%", stateAbbreviation);
-            using (var binaryStream = new BinaryWriter(File.Open(outputFilename, FileMode.Create)))
+            try
             {
-                FetchToStream(overpassScript, binaryStream, countyName);
+                using (var binaryStream = new BinaryWriter(File.Open(outputFilename, FileMode.Create)))
+                {
+                    FetchToStream(overpassScript, binaryStream);
+                }
             }
+            catch (Exception)
+            {
+                if (File.Exists(outputFilename)) File.Delete(outputFilename);
+                throw;
+            }
+
         }
 
 
 
 
-        private static void FetchToStream(string overpassScript, BinaryWriter outputStream, string countyName)
+        private static void FetchToStream(string overpassScript, BinaryWriter outputStream)
         {
             HttpClient httpClient = new HttpClient();
 
@@ -87,6 +130,7 @@ namespace MergeAddressesAndBuildings
             var totalReads = 0L;
             var buffer = new byte[8192];
 
+            httpClient.Timeout = new TimeSpan(hours: 0, minutes: 10, seconds: 0);
             using (var result = httpClient.PostAsync(requestURL, formData).Result)
             {
                 using (Stream contentStream = result.Content.ReadAsStreamAsync().Result)
@@ -123,6 +167,7 @@ namespace MergeAddressesAndBuildings
                     throw new Exception($"HTTP Error {result.StatusCode} querying Overpass API for '{requestURL}' returned '{content}'");
                 }
             }
+
         }
 
 
