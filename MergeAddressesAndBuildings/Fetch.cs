@@ -33,27 +33,6 @@ namespace MergeAddressesAndBuildings
             (._;>;);
             out meta;";
 
-        // NOTE: Area within area is not implemented
-        //public const string BuildingAddrOverpassScript =
-        //   @"[out:xml][timeout:300];
-        //    area[""ISO3166-2""=""US-%STATEABBR%""][boundary=administrative]->.state;
-        //    (
-        //      area (area.state)[name=""%COUNTYNAME%""][admin_level=6][boundary=administrative]->.county;
-        //        // gather results
-        //        (
-        //        // query part for: (wildcard key like) == * anything
-        //          node(area.county)[~""addr.*""~"".*""];
-        //          (way(area.county)[~""addr.*""~"".*""]; - way(area.county)[""highway""~"".*""];);
-        //          relation(area.county)[~""addr.*""~"".*""];
-
-        //          node(area.county)[~"".*building.*""~"".*""];
-        //          way(area.county)[~"".*building.*""~"".*""];
-        //          relation(area.county)[~"".*building.*""~"".*""];
-        //        );
-        //    );
-        //    (._;>;);
-        //    out meta;";
-
 
         public static void FetchOSMAddrsAndBuildingsToFile(Int64 countyOsmRelationID, string outputFilename)
         {
