@@ -12,7 +12,6 @@ namespace MergeAddressesAndBuildings
     /// </summary>
     public class Fetch
     {
-        // 34.576856628768994,-82.25753534822164,35.20379711377327,-81.71899862122568 spartanburg_buildings.osm
 
         // Overpass script to fetch:
         //   1. All nodes, ways, and relations containing addr* tags, excluding highways
