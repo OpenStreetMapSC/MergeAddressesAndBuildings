@@ -234,7 +234,7 @@ namespace MergeAddressesAndBuildings
             //properties.Add("taskZoom", Zoom); // Ignored
             //properties.Add("taskSplittable", false); // Ignored
             //properties.Add("taskStatus", "READY"); // Ignored
-            properties.Add("import_filename", $"Task-{x:000}-{y:000}-{Zoom:00}.osm");
+            properties.Add("import_filename", $"Task-{x:000}-{y:000}-{Zoom:00}.osm.gz");
 
             List<IPosition> segments = new List<IPosition>();
             segments.Add(new Position(bbox.MinLat, bbox.MinLon));
