@@ -32,6 +32,10 @@ namespace MergeAddressesAndBuildings
             return angle * (180.0 / Math.PI);
         }
 
+        public bool Equals(Coordinate otherCoordinate)
+        {
+            return (this.Lat == otherCoordinate.Lat) && (this.Lon == otherCoordinate.Lon);
+        }
 
         /// <summary>
         /// Calculate angle in degrees from this coordinate to the other coordinate.

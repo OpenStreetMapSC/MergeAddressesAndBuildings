@@ -37,6 +37,36 @@ namespace MergeAddressesAndBuildings
 
 
         /// <summary>
+        /// Move toward desired angle
+        /// </summary>
+        /// <param name="currentPosition">Starting position</param>
+        /// <param name="distance"></param>
+        /// <param name="bearing">degrees clockwise from true north</param>
+        /// <returns></returns>
+        public static Coordinate MoveByToward(Coordinate currentPosition, double distance, double bearing)
+        {
+            double R = 6378.1; // Radius of the Earth
+
+            double bearingRadians = bearing * Math.PI / 180.0;
+
+            double distanceKm = distance / 1000.0;
+
+            var latRadians = currentPosition.Lat * Math.PI / 180.0;
+            var lonRadians = currentPosition.Lon * Math.PI / 180.0;
+
+            var lat2 = Math.Asin(Math.Sin(latRadians) * Math.Cos(distanceKm / R) +
+                Math.Cos(latRadians) * Math.Sin(distanceKm / R) * Math.Cos(bearingRadians));
+
+            var lon2 = lonRadians + Math.Atan2(Math.Sin(bearingRadians) * Math.Sin(distanceKm / R) * Math.Cos(latRadians),
+             Math.Cos(distanceKm / R) - Math.Sin(latRadians) * Math.Sin(lat2));
+
+            var latDegrees = lat2 * 180.0 / Math.PI;
+            var lonDegrees = lon2 * 180.0 / Math.PI;
+
+            return new Coordinate(latDegrees, lonDegrees);
+        }
+
+        /// <summary>
         /// Computes the distance between this coordinate and another point on the earth.
         /// Uses spherical law of cosines formula, not Haversine.
         /// </summary>
@@ -76,6 +106,94 @@ namespace MergeAddressesAndBuildings
                 return false;
             }
             return true;
+        }
+
+
+        /// <summary>
+        /// Return largest percentage of any bbox overlap for 
+        /// previously known intersecting bboxes.   
+        /// If one box contains the other, overlap is 100%
+        /// </summary>
+        /// <param name="bbox1"></param>
+        /// <param name="bbox2"></param>
+        /// <returns></returns>
+        public static double BBoxOverlapPercent(BBox bbox1, BBox bbox2)
+        {
+            if (BboxContains(bbox1, bbox2) ||
+                BboxContains(bbox2, bbox1))
+            {
+                // One complete box in common.
+                return 100.0;
+            }
+
+            var bboxOverlap = BboxOverlap(bbox1, bbox2);
+            var overlapArea = BboxArea(bboxOverlap);
+
+            var smallestArea = Math.Min(BboxArea(bbox1), BboxArea(bbox2));
+
+            var percentage = (overlapArea / smallestArea) * 100.0;
+            return percentage;
+        }
+
+
+        /// <summary>
+        /// Calculate overlapping bbox area covered by both boxes
+        /// </summary>
+        /// <param name="bbox1"></param>
+        /// <param name="bbox2"></param>
+        /// <returns></returns>
+        public static BBox BboxOverlap(BBox bbox1, BBox bbox2)
+        {
+            var bbox = new BBox();
+
+            bbox.MinLat = Math.Max(bbox1.MinLat, bbox2.MinLat);
+            bbox.MinLon = Math.Max(bbox1.MinLon, bbox2.MinLon);
+
+            bbox.MaxLat = Math.Min(bbox1.MaxLat, bbox2.MaxLat);
+            bbox.MaxLon = Math.Min(bbox1.MaxLon, bbox2.MaxLon);
+
+            return bbox;
+        }
+
+        /// <summary>
+        /// Calculate total bbox area covered by both boxes
+        /// </summary>
+        /// <param name="bbox1"></param>
+        /// <param name="bbox2"></param>
+        /// <returns></returns>
+        public static BBox BboxIntersection(BBox bbox1, BBox bbox2)
+        {
+            var bbox = new BBox();
+
+            bbox.MinLat = bbox1.MinLat < bbox2.MinLat ? bbox1.MinLat : bbox2.MinLat;
+            bbox.MinLon = bbox1.MinLon < bbox2.MinLon ? bbox1.MinLon : bbox2.MinLon;
+
+            bbox.MaxLat = bbox1.MaxLat > bbox2.MaxLat ? bbox1.MaxLat : bbox2.MaxLat;
+            bbox.MaxLon = bbox1.MaxLon > bbox2.MaxLon ? bbox1.MaxLon : bbox2.MaxLon;
+
+            return bbox;
+        }
+
+        /// <summary>
+        /// See if one bbox lies entirely within other
+        /// </summary>
+        /// <param name="bbox1">Possibly containing box</param>
+        /// <param name="bbox2">Possibly contained box</param>
+        /// <returns></returns>
+        public static bool BboxContains(BBox bbox1, BBox bbox2)
+        {
+            return (bbox1.MaxLon < bbox2.MaxLon &&
+                bbox1.MinLon > bbox2.MinLon &&
+                bbox1.MaxLat < bbox2.MaxLat &&
+                bbox1.MinLat > bbox2.MinLat) ;
+        }
+
+
+        public static double BboxArea(BBox bbox)
+        {
+            var width = new Coordinate(bbox.MinLat, bbox.MinLon).GreatCircleDistance(new Coordinate(bbox.MinLat, bbox.MaxLon));
+            var height = new Coordinate(bbox.MinLat, bbox.MinLon).GreatCircleDistance(new Coordinate(bbox.MaxLat, bbox.MinLon));
+            return width * height;
         }
 
         /// <summary>
@@ -131,6 +249,12 @@ namespace MergeAddressesAndBuildings
         }
 
 
+        /// <summary>
+        /// Might be buggy (not used)
+        /// </summary>
+        /// <param name="testPoint"></param>
+        /// <param name="vertices"></param>
+        /// <returns></returns>
         public static bool IsInPolygon(Coordinate testPoint, IList<Coordinate> vertices)
         {
             if (vertices.Count < 3) return false;
@@ -161,6 +285,76 @@ namespace MergeAddressesAndBuildings
             return (x - a) * (x - b) < 0;
         }
 
+
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="way1"></param>
+        /// <param name="way2"></param>
+        /// <returns></returns>
+        public static bool PolygonsTouchOrIntersect(OSMWay way1, OSMWay way2)
+        {
+
+            // Convert to coordinate lists
+            var coords1 = new List<Coordinate>();
+            foreach (var node1 in way1.NodeList)
+            {
+                coords1.Add(new Coordinate(node1.Lat, node1.Lon));
+            }
+            var coords2 = new List<Coordinate>();
+            foreach (var node2 in way2.NodeList)
+            {
+                coords2.Add(new Coordinate(node2.Lat, node2.Lon));
+            }
+
+
+            // Check for shared coordinates
+            foreach (var node1 in way1.NodeList)
+            {
+                foreach (var node2 in way2.NodeList)
+                {
+                    if (node1.LocatedAt(node2)) return true;  // Touching
+                }
+            }
+
+
+
+            // Check for polygon contained entirely within other
+            var clipBoundaryTest = new ClipBoundary(way1);
+            if (clipBoundaryTest.IsInBoundary(way2.NodeList[0])) return true;
+            clipBoundaryTest = new ClipBoundary(way2);
+            if (clipBoundaryTest.IsInBoundary(way1.NodeList[0])) return true;
+
+
+            // Check for any intersection with any other segment
+            Coordinate lastPoint1 = null;
+            foreach (var point1 in coords1)
+            {
+                if (lastPoint1 != null)
+                {
+                    // Make segment with previous point
+
+                    Coordinate lastPoint2 = null;
+                    foreach (var point2 in coords2)
+                    {
+                        if (lastPoint2 != null)
+                        {
+
+                            var testCrossingSegment = new CrossingSegments(point1, lastPoint1, point2, lastPoint2);
+                            if (testCrossingSegment.IntersectionPoint != null)
+                            {
+                                return true;  // Have intersection
+                            }
+
+                        }
+                        lastPoint2 = point2;
+                    }
+                }
+                lastPoint1 = point1;
+            }
+
+            return false;
+        }
 
     }
 }

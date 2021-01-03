@@ -21,6 +21,7 @@ namespace MergeAddressesAndBuildings
 
         private int actionCount;
 
+        private int geometryReplaced;
 
         /// <summary>
         /// Perform merge
@@ -40,6 +41,11 @@ namespace MergeAddressesAndBuildings
 
         public void PerformMerge()
         {
+            newBuildings.ResetUsedFlag();
+
+            newBuildings.SetConnectedWays();
+            osmData.SetConnectedWays();
+
             CheckDuplicateBuilding();
 
             DivideNewAddressesIntoBuckets();
@@ -47,6 +53,33 @@ namespace MergeAddressesAndBuildings
 
             AttachInteriorAddresses();
             AttachNearbyAddresses();
+
+            SpreadRemainingAddresses();
+        }
+
+        /// <summary>
+        /// This is the step after other merge is complete so that 
+        /// address nodes are not nudged outside of building boundaries
+        /// before the building is analyzed
+        /// </summary>
+        private void SpreadRemainingAddresses()
+        {
+            foreach (var bucket in indexBuckets)
+            {
+                if (bucket != null)
+                {
+                    var addressList = new List<OSMNode>();
+                    foreach (OSMNode addrNode in bucket)
+                    {
+                        if (addrNode.Tags.ContainsKey("addr:housenumber"))
+                        {
+                            addressList.Add(addrNode);
+                        }
+                    }
+                    var spreadNodes = new NodeSpreader(addressList);
+                    spreadNodes.SpreadNodes();
+                }
+            }
         }
 
         private void AttachNearbyAddresses()
@@ -82,8 +115,7 @@ namespace MergeAddressesAndBuildings
         /// <param name="building">As way or relation</param>
         private void AttachNearbyhAddressTo(BaseOSM building, BBox bbox)
         {
-            if (building.Tags.ContainsKey("addr:housenumber") ||
-                building.InnerAttributes.ContainsKey("action")) return; // Address already attached or already edited
+            if (building.Tags.ContainsKey("addr:housenumber") ) return; // Address already attached or already edited
 
 
             var searchRadius = GetSearchRadius(building.Lat, building.Lon, bbox);
@@ -141,28 +173,25 @@ namespace MergeAddressesAndBuildings
         {
             foreach (var building in buildings.osmRelations.Values)
             {
-                AttachInteriorhAddressTo(building, building.Bbox);
+                AttachInteriorAddressTo(building, building.Bbox);
             }
             foreach (var building in buildings.osmWays.Values)
             {
-                AttachInteriorhAddressTo(building, building.Bbox);
+                AttachInteriorAddressTo(building, building.Bbox);
             }
 
         }
-
-
 
         /// <summary>
         /// Look for unique address node defined on building object
         /// </summary>
         /// <param name="building">As way or relation</param>
-        private void AttachInteriorhAddressTo(BaseOSM building, BBox bbox)
+        private void AttachInteriorAddressTo(BaseOSM building, BBox bbox)
         {
             if (building.Tags.ContainsKey("addr:housenumber")) return; // Address already attached
 
-            OSMNode addNode = null;  // Possible node to add
             List<BaseOSM> addrBucket = null; // Bucket containing add node
-            int nodeCount = 0; // # of nodes found
+            List<OSMNode> containedAddressNodes = new List<OSMNode>();  // Addresses found inside building outline
             (var xList, var yList) = buckets.ReturnBucketList(building.Lat, building.Lon);
             for (int i = 0; i < xList.Count; i++)
             {
@@ -176,9 +205,8 @@ namespace MergeAddressesAndBuildings
                         {
                             if (BuildingContainsNode(building, addrNode))
                             {
-                                addNode = addrNode;
+                                containedAddressNodes.Add(addrNode);
                                 addrBucket = indexBuckets[idx];
-                                nodeCount++;
                             }
 
                         }
@@ -186,13 +214,38 @@ namespace MergeAddressesAndBuildings
                 }
             }
 
-            if (nodeCount == 1)
+            switch (containedAddressNodes.Count)
             {
-                // Building contains exactly 1 node
-                AttachNode(building, addNode, addrBucket);
+                case 0:
+                    // No address for this building
+                    break;
+                case 1:
+                    // Building contains exactly 1 node
+                    AttachNode(building, containedAddressNodes[0], addrBucket);
+                    break;
+                case 2:
+                    if (building.Tags.ContainsKey("building"))
+                    {
+                        if (building.Tags["building"] == "apartments")
+                        {
+                            // North American term 'Duplex'
+                            building.Tags["building"] = "semidetached_house";
+                        }
+                    }
+                    var spreadNodes = new NodeSpreader(containedAddressNodes);
+                    spreadNodes.SpreadNodes();
+                    break;
+                default:
+                    var spreadNodes2 = new NodeSpreader(containedAddressNodes);
+                    spreadNodes2.SpreadNodes();
+                    break;
             }
 
         }
+
+
+
+
 
         private void AttachNode(BaseOSM building, OSMNode addrNode, List<BaseOSM> addrBucket)
         {
@@ -232,18 +285,25 @@ namespace MergeAddressesAndBuildings
             DivideNewBuildingsIntoBuckets();
             foreach (var building in osmData.osmRelations.Values)
             {
-                CheckOverlappedBuilding(building, building.Bbox);
+                CheckOverlappedBuilding(building, building.OuterWay, building.Bbox);
             }
             foreach (var building in osmData.osmWays.Values)
             {
-                CheckOverlappedBuilding(building, building.Bbox);
+                CheckOverlappedBuilding(building, building, building.Bbox);
             }
 
-            Console.WriteLine($" - Removed {actionCount:N0} overlapping buildings");
+            Console.WriteLine($" - Removed {actionCount:N0} overlapping buildings, replaced geometry on {geometryReplaced:N0} buildings.");
         }
 
 
-        private void CheckOverlappedBuilding(BaseOSM osmObject, BBox bbox)
+        /// <summary>
+        /// See if any new building footprints conflict with an existing building - 
+        /// remove new building from candidate set if so.
+        /// </summary>
+        /// <param name="osmObject">Existing building as way or relation</param>
+        /// <param name="osmBuildingOutline">Outer building way</param>
+        /// <param name="bbox">Overall bbox of existing building</param>
+        private void CheckOverlappedBuilding(BaseOSM osmObject, OSMWay osmBuildingOutline, BBox bbox)
         {
             (var xList, var yList) = buckets.ReturnBucketList(osmObject.Lat, osmObject.Lon);
             for (int i = 0; i < xList.Count; i++)
@@ -251,13 +311,17 @@ namespace MergeAddressesAndBuildings
                 var idx = ArrIndex(xList[i], yList[i]);
                 if (indexBuckets[idx] != null)
                 {
+
                     // Check relations and remove dups, along with member ways
                     foreach (BaseOSM newBuilding in indexBuckets[idx])
                     {
                         if (newBuilding.GetType() == typeof(OSMRelation))
                         {
                             var newRelation = newBuilding as OSMRelation;
-                            if (SpatialUtilities.BBoxIntersects(newRelation.Bbox, bbox))
+                            // BBbox check is fast; if that shows possible conflict, check for actual overlap 
+                            // using PolygonsTouchOrIntersect()
+                            if (SpatialUtilities.BBoxIntersects(newRelation.Bbox, bbox) &&
+                                SpatialUtilities.PolygonsTouchOrIntersect(newRelation.OuterWay, osmBuildingOutline) )
                             {
                                 actionCount++;
                                 foreach (var way in newRelation.OSMWays)
@@ -276,10 +340,36 @@ namespace MergeAddressesAndBuildings
                         if (newBuilding.GetType() != typeof(OSMRelation))
                         {
                             var newWay = newBuilding as OSMWay;
-                            if (SpatialUtilities.BBoxIntersects(newWay.Bbox, bbox))
+                            if (!newWay.IsUsed)
                             {
-                                actionCount++;
-                                newBuildings.osmWays.Remove(newBuilding.ID);
+                                // BBbox check is fast; if that shows possible conflict, check for actual overlap 
+                                // using PolygonsTouchOrIntersect()
+                                if (SpatialUtilities.BBoxIntersects(newWay.Bbox, bbox) &&
+                                    SpatialUtilities.PolygonsTouchOrIntersect(newWay, osmBuildingOutline) &&
+                                    SpatialUtilities.BBoxOverlapPercent(newWay.Bbox, bbox) > 50.0)
+                                {
+
+                                    if (osmBuildingOutline.Tags.ContainsKey("building") &&
+                                        newWay.Tags.ContainsKey("building") )
+                                    {
+                                        var existingBuildingTag = osmBuildingOutline.Tags["building"];
+                                        var newBuildingTag = newBuilding.Tags["building"];
+                                        if (existingBuildingTag == "yes")
+                                        {
+                                            // Replace generic building tag with possible better tag
+                                            osmBuildingOutline.Tags["building"] = newBuilding.Tags["building"];
+                                        }
+                                    }
+
+                                    if (GeometryReplaced(osmBuildingOutline, newWay))
+                                    {
+                                        newWay.IsUsed = true;
+                                        geometryReplaced++;
+                                    }
+                                    actionCount++;
+                                    newBuildings.osmWays.Remove(newBuilding.ID);
+
+                                }
                             }
 
                         }
@@ -288,6 +378,146 @@ namespace MergeAddressesAndBuildings
 
                 }
             }
+        }
+
+        /// <summary>
+        /// Replace geometry of existing building with new building if it does not share nodes
+        /// with any other building.
+        /// </summary>
+        /// <param name="osmBuildingOutline"></param>
+        /// <param name="newWay"></param>
+        private bool GeometryReplaced(OSMWay osmBuildingOutline, OSMWay newWay)
+        {
+            if (osmBuildingOutline.InnerAttributes.ContainsKey("action") ||
+                osmBuildingOutline.NodeList[0].InnerAttributes.ContainsKey("action"))
+            {
+                // Was already edited
+                return false;
+            }
+
+            // Special precondition check for Greenville City if building from
+            // import account or older than 2012 and questionable imagery
+            bool replace = false;
+            if (osmBuildingOutline.InnerAttributes.ContainsKey("user") &&
+                osmBuildingOutline.InnerAttributes["user"].ToLower().Contains("import"))
+            {
+                replace = true;
+            }
+            if (osmBuildingOutline.InnerAttributes.ContainsKey("timestamp"))
+            {
+                var lastEditDate = DateTime.Parse(osmBuildingOutline.InnerAttributes["timestamp"]);
+                if (lastEditDate.Year < 2012)
+                {
+                    replace = true;
+                }
+            }
+
+            if (!replace) return false;
+
+            // Don't replace if old or new building has shared node
+            foreach (var node in osmBuildingOutline.NodeList)
+            {
+                if (osmData.connectedWays.ContainsKey(node))
+                {
+                    if (osmData.connectedWays[node].Count > 1)
+                    {
+                        // Shared node; don't replace
+                        return false; 
+                    }
+                }
+            }
+            foreach (var node in newWay.NodeList)
+            {
+                if (newBuildings.connectedWays.ContainsKey(node))
+                {
+                    if (newBuildings.connectedWays[node].Count > 1)
+                    {
+                        // Shared node; don't replace
+                        return false;
+                    }
+                }
+            }
+
+
+            // Proceed with geometry replace
+            for (int i=0; i < newWay.NodeList.Count; i++)
+            {
+                if (i == newWay.NodeList.Count-1)
+                {
+                    // Make last node = first node to close polygon (would have been an original but relocated node)
+                    if (newWay.NodeList.Count < osmBuildingOutline.NodeList.Count)
+                    {
+                        // New building has fewer data points
+                        osmBuildingOutline.NodeList[i] = osmBuildingOutline.NodeList[0];
+                    }
+                    else
+                    {
+                        osmBuildingOutline.NodeList.Add(osmBuildingOutline.NodeList[0]);
+                    }
+                } else if (i >= osmBuildingOutline.NodeList.Count)
+                {
+                    // Add new node to end.
+                    osmBuildingOutline.NodeList.Add(newWay.NodeList[i]);
+
+                    // Remove node from new dataset
+                    var newId = newWay.NodeList[i].ID;
+                    if (!osmData.osmNodes.ContainsKey(newId))
+                    {
+                        osmData.osmNodes.Add(newId, newWay.NodeList[i]);
+                        if (newBuildings.osmNodes.ContainsKey(newId))
+                        {
+                            newBuildings.osmNodes.Remove(newId);
+                        }
+                    }
+;               } else if (i == (osmBuildingOutline.NodeList.Count-1) )
+                {
+                    // Last node in list
+                    // Replace last node in old dataset (it's repeated in list)
+                    osmBuildingOutline.NodeList[i] = newWay.NodeList[i];
+
+                    // Remove node from new dataset
+                    var newId = newWay.NodeList[i].ID;
+                    if (!osmData.osmNodes.ContainsKey(newId))
+                    {
+                        osmData.osmNodes.Add(newId, newWay.NodeList[i]);
+                        if (newBuildings.osmNodes.ContainsKey(newId))
+                        {
+                            newBuildings.osmNodes.Remove(newId);
+                        }
+                    }
+                }
+                else
+                {
+                    // Edit existing node position
+                    RelocateNode(osmBuildingOutline.NodeList[i], newWay.NodeList[i]);
+                }
+            }
+
+            // Remove extra nodes from end of old building
+            while (osmBuildingOutline.NodeList.Count > newWay.NodeList.Count)
+            {
+                osmBuildingOutline.NodeList.RemoveAt(osmBuildingOutline.NodeList.Count - 1);
+            }
+
+            MarkEdited(osmBuildingOutline);
+            SpatialUtilities.SetBboxFor(osmBuildingOutline);  // Reset Bbox for new outline
+            return true;
+        }
+
+        /// <summary>
+        /// Edit node coordinates to new position
+        /// </summary>
+        /// <param name="existingNode"></param>
+        /// <param name="newNode"></param>
+        private void RelocateNode(OSMNode existingNode, OSMNode newNode)
+        {
+            existingNode.InnerAttributes["lat"] = newNode.InnerAttributes["lat"];
+            existingNode.Lat = newNode.Lat;
+            existingNode.InnerAttributes["lon"] = newNode.InnerAttributes["lon"];
+            existingNode.Lon = newNode.Lon;
+
+            MarkEdited(existingNode);
+
         }
 
         /// <summary>
@@ -334,6 +564,8 @@ namespace MergeAddressesAndBuildings
                     var addrRemoveList = new List<OSMNode>();
                     foreach (OSMNode newAddrNode in indexBuckets[idx])
                     {
+                        if (!UnitMatch(newAddrNode, osmAddrObject)) continue;
+
                         if (newAddrNode.Tags.ContainsKey("addr:housenumber") &&
                             newAddrNode.Tags.ContainsKey("addr:street"))
                         {
@@ -356,19 +588,35 @@ namespace MergeAddressesAndBuildings
             }
         }
 
+        /// <summary>
+        /// Check for differing units
+        /// </summary>
+        /// <param name="newAddrNode"></param>
+        /// <param name="osmAddrObject"></param>
+        /// <returns></returns>
+        private bool UnitMatch(OSMNode newAddrNode, BaseOSM osmAddrObject)
+        {
+            var newUnit = "";
+            var oldUnit = "";
+            if (newAddrNode.Tags.ContainsKey("addr:unit")) newUnit = newAddrNode.Tags["addr:unit"];
+            if (osmAddrObject.Tags.ContainsKey("addr:unit")) oldUnit = osmAddrObject.Tags["addr:unit"];
+
+            return newUnit == oldUnit;
+        }
+
 
 
 
         /// <summary>
         /// Update OSM object attributes to show edited and trigger upload
         /// </summary>
-        /// <param name="building"></param>
-        private void MarkEdited(BaseOSM building)
+        /// <param name="osmOject"></param>
+        private void MarkEdited(BaseOSM osmOject)
         {
-            building.InnerAttributes.Add("action", "modify");
-            //Int64 version = Convert.ToInt64(building.InnerAttributes["version"]);
-            //version++;
-            //building.InnerAttributes["version"] = version.ToString();
+            if (!osmOject.InnerAttributes.ContainsKey("action"))
+            {
+                osmOject.InnerAttributes.Add("action", "modify");
+            }
         }
 
 

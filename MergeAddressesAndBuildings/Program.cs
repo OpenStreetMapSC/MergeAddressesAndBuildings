@@ -154,7 +154,15 @@ namespace MergeAddressesAndBuildings
 
             var dataBbox = newAddresses.OuterBbox();
             dataBbox = SpatialUtilities.BboxUnion(dataBbox, newBuildings.OuterBbox());
-            dataBbox = SpatialUtilities.BboxUnion(dataBbox, osmExistingData.OuterBbox());
+
+            // Special for greenville city:
+            //dataBbox = SpatialUtilities.BboxUnion(dataBbox, osmExistingData.OuterBbox());
+            dataBbox = SpatialUtilities.BboxUnion(dataBbox, osmCountyBorder.OuterBbox());
+
+            var duplicateAddresses = new DuplicateAddress(newAddresses);
+            var removeAddrCount = duplicateAddresses.RemoveDuplicateAddresses();
+            Console.WriteLine($"Removed {removeAddrCount:N0} duplicate addresses");
+
             var buckets = new Buckets(osmCountyBorder.osmWays, dataBbox, 100 /* meters */);
 
             Console.WriteLine("Merging data...");
@@ -163,6 +171,8 @@ namespace MergeAddressesAndBuildings
 
             TrimOSMData.RemoveOrphanNodes(newBuildings);
             TrimOSMData.RemoveUneditedData(osmExistingData);
+
+
 
             Console.WriteLine("Saving merged data...");
             var mergedFile = Path.Combine(resultFolder, "MergedOSMData.osm");

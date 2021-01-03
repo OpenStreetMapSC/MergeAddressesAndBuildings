@@ -15,6 +15,8 @@ namespace MergeAddressesAndBuildings
         public Dictionary<Int64, OSMNode> osmNodes { get; set; }
         public Dictionary<Int64, OSMWay> osmWays { get; set; }
         public Dictionary<Int64, OSMRelation> osmRelations { get; set; }
+        public Dictionary<OSMNode, List<OSMWay>> connectedWays { get; set; }
+
 
         public BBox OuterBbox()
         {
@@ -126,6 +128,20 @@ namespace MergeAddressesAndBuildings
                         if (osmWays.ContainsKey(id))
                         {
                             osmRelation.OSMWays.Add(osmWays[id]);
+                            if (role == "outer")
+                            {
+                                var lastOuter = osmRelation.OuterWay;
+                                if (lastOuter == null)
+                                {
+                                    // No previous assignment
+                                    osmRelation.OuterWay = osmWays[id];
+                                }
+                                else if (osmWays[id].Bbox.Area() > lastOuter.Bbox.Area() )
+                                {
+                                    // Save largest way as outer
+                                    osmRelation.OuterWay = osmWays[id];
+                                }
+                            }
                         }
                     }
 
@@ -148,6 +164,10 @@ namespace MergeAddressesAndBuildings
             foreach (var way in osmRelation.OSMWays)
             {
                 bbox = SpatialUtilities.BboxUnion(bbox, way.Bbox);
+            }
+            if (osmRelation.OuterWay == null)
+            {
+                osmRelation.OuterWay = osmRelation.OSMWays[0];
             }
             osmRelation.Bbox = bbox;
             osmRelation.SetCenter();
@@ -290,6 +310,33 @@ namespace MergeAddressesAndBuildings
             mergedOSM.osmRelations = allRelations;
 
             return mergedOSM;
+        }
+
+        /// <summary>
+        /// Record all ways connected to each node of existing
+        /// buildings
+        /// </summary>
+        public void SetConnectedWays()
+        {
+            // Set up empty list of connected ways to start
+            connectedWays = new Dictionary<OSMNode, List<OSMWay>>();
+            foreach (var node in osmNodes.Values)
+            {
+                var wayList = new List<OSMWay>();
+                connectedWays.Add(node, wayList);
+            }
+
+            foreach (var way in osmWays.Values)
+            {
+                foreach (var node in way.NodeList)
+                {
+                    var ways = connectedWays[node];
+                    if (!ways.Contains(way))
+                    {
+                        ways.Add(way);
+                    }
+                }
+            }
         }
 
 

@@ -18,9 +18,6 @@ namespace MergeAddressesAndBuildings
         private OSMDataset[] osmDataSections;
         private int[] xMergeCount; // Number of tasks merged into this task
 
-        // For each node, the list of connected ways so that ways sharing nodes are properly handled
-        private Dictionary<OSMNode, List<OSMWay>> connectedWays;
-
         private string taskFolder = null;
 
         /// <summary>
@@ -39,7 +36,7 @@ namespace MergeAddressesAndBuildings
             osmDataSections = new OSMDataset[cellCount];
             xMergeCount = new int[cellCount];
 
-            InitializeConnectedWays(osmDataset);
+            osmDataset.SetConnectedWays();
 
             // Place data into indiividual sections
             foreach (var relation in osmDataset.osmRelations.Values)
@@ -51,7 +48,7 @@ namespace MergeAddressesAndBuildings
                 // Store related data
                 foreach (var way in relation.OSMWays)
                 {
-                    SaveWayTo(osmDataSection, way);
+                    SaveWayTo(osmDataset, osmDataSection, way);
                 }
             }
 
@@ -61,7 +58,7 @@ namespace MergeAddressesAndBuildings
                 {
                     (var x, var y) = taskBuckets.ReturnBucket(way.Lat, way.Lon);
                     var osmDataSection = GetSectionData(taskBuckets, x, y);
-                    SaveWayTo(osmDataSection, way);
+                    SaveWayTo(osmDataset, osmDataSection, way);
                 }
             }
 
@@ -172,31 +169,6 @@ namespace MergeAddressesAndBuildings
 
 
 
-        private void InitializeConnectedWays(OSMDataset osmDataset)
-        {
-            // Set up empty list of connected ways to start
-            connectedWays = new Dictionary<OSMNode, List<OSMWay>>();
-            foreach (var node in osmDataset.osmNodes.Values)
-            {
-                var wayList = new List<OSMWay>();
-                connectedWays.Add(node, wayList);
-            }
-
-            foreach (var way in osmDataset.osmWays.Values)
-            {
-                foreach (var node in way.NodeList)
-                {
-                    var ways = connectedWays[node];
-                    if (!ways.Contains(way))
-                    {
-                        ways.Add(way);
-                    }
-                }
-            }
-        }
-
-
-
         private void WriteTaskGeoJSON(Buckets taskBuckets, string outputFilePath)
         {
             FeatureCollection tasks = new FeatureCollection();
@@ -291,7 +263,7 @@ namespace MergeAddressesAndBuildings
         }
 
 
-        private void SaveWayTo(OSMDataset osmDataSection, OSMWay way)
+        private void SaveWayTo(OSMDataset sourceSet,  OSMDataset osmDataSection, OSMWay way)
         {
             if (!way.IsUsed)
             {
@@ -304,11 +276,11 @@ namespace MergeAddressesAndBuildings
                         osmDataSection.osmNodes.Add(node.ID, node);
                         node.IsUsed = true;
 
-                        foreach (var connectedWay in connectedWays[node])
+                        foreach (var connectedWay in sourceSet.connectedWays[node])
                         {
                             if (!connectedWay.IsUsed)
                             {
-                                SaveWayTo(osmDataSection, connectedWay); // Recursive to include all ways sharing this node
+                                SaveWayTo(sourceSet, osmDataSection, connectedWay); // Recursive to include all ways sharing this node
                             }
                         }
                     }

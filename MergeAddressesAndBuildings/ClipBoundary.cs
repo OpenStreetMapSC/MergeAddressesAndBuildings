@@ -148,7 +148,12 @@ namespace MergeAddressesAndBuildings
 
         }
 
-        public bool IsInBoundary(OSMNode node)
+        /// <summary>
+        /// Algorithm has bugs - see test
+        /// </summary>
+        /// <param name="node"></param>
+        /// <returns></returns>
+        public bool IsInBoundary0(OSMNode node)
         {
             if (!SpatialUtilities.BBoxContains(boundaryBbox, node)) return false;
 
@@ -190,5 +195,104 @@ namespace MergeAddressesAndBuildings
             return inside;
         }
 
+
+        /// <summary>
+        /// Algorithm has bugs - see test
+        /// </summary>
+        /// <param name="node"></param>
+        /// <returns></returns>
+        public bool IsInBoundary1(OSMNode point)
+        {
+            bool inside = false;
+
+            if (boundaryCoordinates.Count < 3)
+            {
+                return inside;
+            }
+            var a = boundaryCoordinates[boundaryCoordinates.Count-1]; // Start at end
+            foreach (var b in boundaryCoordinates)
+            {
+                if ((b.Lon == point.Lon) && (b.Lat == point.Lat))
+                    return true;
+
+                if ((b.Lat == a.Lat) && (point.Lat == a.Lat) && (a.Lon <= point.Lon) && (point.Lon <= b.Lon))
+                    return true;
+
+                if ((b.Lat < point.Lat) && (a.Lat >= point.Lat) || (a.Lat < point.Lat) && (b.Lat >= point.Lat))
+                {
+                    if (b.Lon + (point.Lat - b.Lat) / (a.Lat - b.Lat) * (a.Lon - b.Lon) <= point.Lon)
+                        inside = !inside;
+                }
+                a = b;
+            }
+            return inside;
+        }
+
+
+
+
+        public bool IsInBoundary(OSMNode node)
+        {
+            return wn_PnPoly(node) != 0;
+        }
+
+        /// <summary>
+        ///  isLeft(): tests if a point is Left|On|Right of an infinite line.
+        ///    Input:  three points P0, P1, and P2
+        ///    Return: >0 for P2 left of the line through P0 and P1
+        ///            =0 for P2  on the line
+        ///            <0 for P2  right of the line
+        ///    See: Algorithm 1 "Area of Triangles and Polygons" @ http://geomalgorithms.com/a03-_inclusion.html
+        /// </summary>
+        /// <param name="P0"></param>
+        /// <param name="P1"></param>
+        /// <param name="P2"></param>
+        /// <returns></returns>
+        private double isLeft(Coordinate P0, Coordinate P1, Coordinate P2)
+        {
+            return ((P1.Lon - P0.Lon) * (P2.Lat - P0.Lat)
+                    - (P2.Lon - P0.Lon) * (P1.Lat - P0.Lat));
+        }
+
+
+        /// <summary>
+        /// winding number test for a point in a polygon
+        //      Input:   P = a point,
+        //               boundaryCoordinates[] = vertex points of a polygon V[n+1] with V[n]=V[0]
+        //      Return:  wn = the winding number (=0 only when P is outside)
+        /// </summary>
+        /// <param name="P">Point </param>
+        /// <returns></returns>
+        public int wn_PnPoly(OSMNode P)
+        {
+            Coordinate point = new Coordinate(P.Lat, P.Lon);
+
+            int wn = 0;    // the  winding number counter
+
+            // loop through all edges of the polygon
+            for (int i = 0; i < boundaryCoordinates.Count-1; i++)
+            {   // edge from V[i] to  V[i+1]
+
+                //var next = V[(i + 1) % V.Count];
+                var next = boundaryCoordinates[i + 1];
+
+                if (boundaryCoordinates[i].Lat <= point.Lat)
+                {          // start y <= P.Lat
+                    if (next.Lat > point.Lat)      // an upward crossing
+                        if (isLeft(boundaryCoordinates[i], next, point) > 0)  // P left of  edge
+                            ++wn;            // have  a valid up intersect
+                }
+                else
+                {                        // start y > P.Lat (no test needed)
+                    if (next.Lat <= point.Lat)     // a downward crossing
+                        if (isLeft(boundaryCoordinates[i], next, point) < 0)  // P right of  edge
+                            --wn;            // have  a valid down intersect
+                }
+            }
+            return wn;
+        }
     }
+
+
+
 }

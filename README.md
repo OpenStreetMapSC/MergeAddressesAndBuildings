@@ -6,7 +6,7 @@ Tested with Windows 64 bit, but should be able to generate a 64-bit Linux execut
 
 A 64-bit Windows executable is in the PublishedBinary folder
 
-Tools to change the source code: Visual Studio 2019 or VS Code, Dotnet core 3.0
+Tools to change the source code: Visual Studio 2019 or VS Code, Dotnet core 5.0
 
 * Input: .OSM file containing new point Address data (formatted and ready for upload) . 2 million max (because of starting ID numbering when creating new buildings)
 
@@ -14,6 +14,14 @@ Tools to change the source code: Visual Studio 2019 or VS Code, Dotnet core 3.0
 
 * Action - attach address nodes to new buildings and existing OSM buildings when possible.  Remaining
 addresses are uploaded as nodes.
+
+* Action - Remove true duplicate address nodes - those at same position with same address info.  NOTE: OGR2OSM merges all nodes at identical positions, regardless of tagging.   Many GIS sources will stack address points from different building levels. 
+A special patch to OGR2OSM is required to remove the duplicate node merge and allow duplicate nodes into the result file.   This modification should normally only be applied to the address points data and not buildings.
+
+* Action - Separate address nodes at same location by approximately 1 meter to allow OSM editors access to each node.
+
+* Action - Apply ReplaceGeometry to existing buildings that don't share nodes with other buildings.   Reuses existing building nodes and outline when possible.   This is most useful when importing building footprints from a high quality
+data source.  Currently this has a hard coded filter in the GeometryReplaced() method to apply only to buildings most likely to be improved.
 
 * Interim Result: One large .OSM file 'newBuildings.osm' containing all new buildings, clipped to county boundary.   For information only.
 
