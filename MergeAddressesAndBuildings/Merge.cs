@@ -395,21 +395,26 @@ namespace MergeAddressesAndBuildings
                 return false;
             }
 
+            var lastEditDate = DateTime.Now;
+            var lastEditor = "";
             // Special precondition check for Greenville City if building from
-            // import account or older than 2012 and questionable imagery
+            // import account or older than 2013 and questionable imagery
             bool replace = false;
-            if (osmBuildingOutline.InnerAttributes.ContainsKey("user") &&
-                osmBuildingOutline.InnerAttributes["user"].ToLower().Contains("import"))
+            if (osmBuildingOutline.InnerAttributes.ContainsKey("user"))
             {
-                replace = true;
+                lastEditor = osmBuildingOutline.InnerAttributes["user"];
             }
             if (osmBuildingOutline.InnerAttributes.ContainsKey("timestamp"))
             {
-                var lastEditDate = DateTime.Parse(osmBuildingOutline.InnerAttributes["timestamp"]);
-                if (lastEditDate.Year < 2012)
-                {
-                    replace = true;
-                }
+                lastEditDate = DateTime.Parse(osmBuildingOutline.InnerAttributes["timestamp"]);
+            }
+            if (lastEditor.ToLower().Contains("import"))
+            {
+                replace = true;
+            }
+            if (lastEditDate.Year < 2013)
+            {
+                replace = true;
             }
 
             if (!replace) return false;

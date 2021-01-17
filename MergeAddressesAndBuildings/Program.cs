@@ -112,7 +112,7 @@ namespace MergeAddressesAndBuildings
                     // Save a copy for inspection or to save time when rerunning
                     var writeList = new List<OSMDataset>();
                     writeList.Add(newMSBuildingData);
-                    WriteOSM.WriteDocument(newOsmBuildingsFilename, writeList);
+                    WriteOSM.WriteDocument(newOsmBuildingsFilename, writeList, true);
                 } else
                 {
                     // Assume new file is .OSM file and it will be read directly
@@ -181,7 +181,7 @@ namespace MergeAddressesAndBuildings
             osmDataList.Add(newBuildings);
             osmDataList.Add(osmExistingData);
 
-            WriteOSM.WriteDocument(mergedFile, osmDataList);
+            WriteOSM.WriteDocument(mergedFile, osmDataList, true);  // For reference only
 
             Console.WriteLine("Combining and dividing data into task squares...");
             var mergedDataset = OSMDataset.CombineDatasets(osmDataList);

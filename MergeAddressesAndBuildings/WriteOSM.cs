@@ -6,8 +6,14 @@ namespace MergeAddressesAndBuildings
 {
     public class WriteOSM
     {
+        /// <summary>
+        /// Create .OSM text file from source datasets
+        /// </summary>
+        /// <param name="filename">Target filename</param>
+        /// <param name="osmDataList">Datasets to write</param>
+        /// <param name="locked">Create a file that won't allow edit or upload in JOSM</param>
         public static void WriteDocument(string filename, 
-            List<OSMDataset> osmDataList)
+            List<OSMDataset> osmDataList, bool locked)
         {
             var settings = new XmlWriterSettings();
             settings.Indent = true;
@@ -22,6 +28,11 @@ namespace MergeAddressesAndBuildings
                 xmlWriter.WriteStartElement("osm");
                 xmlWriter.WriteAttributeString("version", "0.6");
                 xmlWriter.WriteAttributeString("generator", "MergeAddressesAndBuildings 1.0.0");
+                if (locked)
+                {
+                    xmlWriter.WriteAttributeString("upload", "false");
+                    xmlWriter.WriteAttributeString("locked", "true");
+                }
 
                 foreach (var osmData in osmDataList)
                 {

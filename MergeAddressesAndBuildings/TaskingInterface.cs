@@ -256,7 +256,7 @@ namespace MergeAddressesAndBuildings
             var filePath = Path.Combine(taskFolder, filename);
             var osmList = new List<OSMDataset>();
             osmList.Add(oSMDataset);
-            WriteOSM.WriteDocument(filePath, osmList);
+            WriteOSM.WriteDocument(filePath, osmList, false);
 
             WriteGZ.Compress(filePath);
             File.Delete(filePath); // Leave only compressed .GZ file
