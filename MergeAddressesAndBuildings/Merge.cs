@@ -417,6 +417,13 @@ namespace MergeAddressesAndBuildings
                 replace = true;
             }
 
+            // Don't replace if possibly lower resolution
+            // (Would also need to possibly dispose of unused nodes if so
+            if (osmBuildingOutline.NodeList.Count > newWay.NodeList.Count) return false;
+
+            // Don't replace if entrances, etc are marked.
+            if (ExtraNodeTags(osmBuildingOutline)) return false;
+
             if (!replace) return false;
 
             // Don't replace if old or new building has shared node
@@ -509,6 +516,18 @@ namespace MergeAddressesAndBuildings
             return true;
         }
 
+        private bool ExtraNodeTags(OSMWay osmBuildingOutline)
+        {
+            var extraTags = false;
+
+            foreach (var node in osmBuildingOutline.NodeList)
+            {
+                if (node.Tags.Count > 0) return true;
+            }
+
+            return extraTags;
+        }
+
         /// <summary>
         /// Edit node coordinates to new position
         /// </summary>
@@ -575,7 +594,7 @@ namespace MergeAddressesAndBuildings
                             newAddrNode.Tags.ContainsKey("addr:street"))
                         {
                             if (newAddrNode.Tags["addr:housenumber"] == osmAddrObject.Tags["addr:housenumber"] &&
-                                newAddrNode.Tags["addr:street"] == osmAddrObject.Tags["addr:street"])
+                                newAddrNode.Tags["addr:street"].Equals(osmAddrObject.Tags["addr:street"], StringComparison.CurrentCultureIgnoreCase) )
                             {
                                 newAddresses.osmNodes.Remove(newAddrNode.ID);
                                 addrRemoveList.Add(newAddrNode);
